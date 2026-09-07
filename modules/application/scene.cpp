@@ -445,6 +445,7 @@ namespace lf {
 			}
 		}
 
+<<<<<<< Updated upstream
 		string load_core_setting(string_view name, string_view fallback = {}) {
 			auto value = LoadSetting("core", name, object(fallback));
 			if (!value) {
@@ -821,6 +822,39 @@ namespace lf {
 			if (auto* input = rmlui_dynamic_cast<Rml::ElementFormControlInput*>(element)) {
 				return string(input->GetValue());
 			}
+=======
+	const bool scene_script_registration{ [] {
+		Register<Scene, error(Scene&)>::add([](Scene& scene) -> error {
+			sol::state& lua = scene.script_state();
+			lua.new_usertype<SceneElement>("leaf.scene_element",
+				"get_value", &SceneElement::get_value,
+				"set_value", &SceneElement::set_value,
+				"get_checked", &SceneElement::get_checked,
+				"set_checked", &SceneElement::set_checked,
+				"get_disabled", &SceneElement::get_disabled,
+				"set_disabled", &SceneElement::set_disabled,
+				"get_inner_rml", &SceneElement::get_inner_rml,
+				"set_inner_rml", &SceneElement::set_inner_rml,
+				"set_text", &SceneElement::set_text,
+				"get_property", &SceneElement::get_property,
+				"set_property", &SceneElement::set_property,
+				"get_attribute", &SceneElement::get_attribute,
+				"set_attribute", &SceneElement::set_attribute,
+				"remove_attribute", &SceneElement::remove_attribute
+			);
+			sol::table window = lua.create_table_with(
+				"set_title", [&scene](string_view title) { scene.window().set_title(title); },
+				"set_fullscreen", [&scene](bool enabled) { scene.window().set_fullscreen(enabled); },
+				"get_fullscreen", [&scene] { return scene.window().fullscreen(); },
+				"set_vsync", [&scene](bool enabled) { scene.window().set_vsync(enabled); },
+				"close", [&scene] { scene.window().set_should_close(true); }
+			);
+			lua["scene"] = lua.create_table_with(
+				"document", [&scene](string_view id) { return SceneElement{ scene, id }; },
+				"escape", [](string_view text) { return Rml::StringUtilities::EncodeRml(Rml::String{ text }); },
+				"window", window
+			);
+>>>>>>> Stashed changes
 			return {};
 		});
 
@@ -1404,7 +1438,43 @@ namespace lf {
 				log::Error("{}", lf::format("[scene] failed to open UI automation script '{}'", automation_path));
 			}
 		}
+<<<<<<< Updated upstream
 		document->Show();
+=======
+	}
+
+	static int rml_modifiers(input_modifiers modifiers) {
+		int result = 0;
+		if (modifiers.has(INPUT_MODIFIER_CTRL)) result |= Rml::Input::KM_CTRL;
+		if (modifiers.has(INPUT_MODIFIER_SHIFT)) result |= Rml::Input::KM_SHIFT;
+		if (modifiers.has(INPUT_MODIFIER_ALT)) result |= Rml::Input::KM_ALT;
+		if (modifiers.has(INPUT_MODIFIER_SUPER)) result |= Rml::Input::KM_META;
+		return result;
+	}
+
+	static int rml_button(input_button button) {
+		switch (button) {
+		case BUTTON_LEFT: return 0;
+		case BUTTON_RIGHT: return 1;
+		case BUTTON_MIDDLE: return 2;
+		default: return static_cast<int>(button - BUTTON_1);
+		}
+	}
+
+	Scene::Scene(Window& display)
+		: display(display) {
+		if (const auto error{ InstallScriptInterfaces(lua) }) {
+			throw runtime_exception(error.message);
+		}
+		const dim2<u32> size = this->display.size();
+		context = Rml::CreateContext(lf::format("scene-{}", static_cast<const void*>(this)), { static_cast<i32>(size.width), static_cast<i32>(size.height) });
+		if (!context) throw runtime_exception("failed to create RML scene context");
+		scope_exit rollback{ [this] { Rml::RemoveContext(context->GetName()); } };
+		if (auto err = Register<Scene, error(Scene&)>::install(*this); err) {
+			throw runtime_exception(err.message);
+		}
+		rollback.release();
+>>>>>>> Stashed changes
 	}
 
 	Scene::~Scene() {

@@ -38,9 +38,18 @@ namespace lf {
 			goto platform_exit;
 		}
 
+<<<<<<< Updated upstream
 		err = rt::init_graphics_extensions(false);
 		if (err) {
 			goto platform_exit;
+=======
+		scope_exit assets_cleanup{ asset::exit };
+		PrototypeTypeRegistry::functions.clear();
+		scope_exit registration_cleanup{ [] { PrototypeTypeRegistry::functions.clear(); } };
+
+		if (error result{ Register<PrototypeTypeRegistry, error()>::install() }) {
+			return result;
+>>>>>>> Stashed changes
 		}
 
 		err = init_rml(args);
@@ -92,7 +101,7 @@ namespace lf {
 
 	bool Update() {
 		update_store();
-		return update_platform();
+		return true;
 	}
 
 	void Exit() {

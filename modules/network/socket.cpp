@@ -12,6 +12,24 @@ namespace lf::net {
 		virtual optional<Message> recv(span<byte> buffer) = 0;
 	};
 
+	struct socket_custom final : Socket::Impl {
+		explicit socket_custom(Socket::Callbacks callbacks) : callbacks{ std::move(callbacks) } {}
+		void send(string_view address, u16 channel, span<const byte> data) override {
+			callbacks.send(Peer::Address(address, channel), data);
+		}
+		optional<Message> recv(span<byte> buffer) override {
+			return callbacks.receive(buffer);
+		}
+		Socket::Callbacks callbacks;
+	};
+
+	Socket Socket::Custom(Callbacks callbacks) {
+		if (!callbacks.send || !callbacks.receive) {
+			throw invalid_argument_exception("socket callbacks must be provided");
+		}
+		return Socket{ make_unique<socket_custom>(std::move(callbacks)) };
+	}
+
 	struct socket_udp final : Socket::Impl {
 		explicit socket_udp(u16 port) : socket(lf::sys::open_socket_udp(port)) {}
 

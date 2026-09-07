@@ -76,6 +76,11 @@ namespace lf::lockstep {
 	};
 
 	struct Options {
+		Tick initial_tick{};
+		std::function<instant()> clock{ lf::now };
+		u64 max_snapshot_bytes{ 512 * 1024 * 1024 };
+		u32 max_buffered_ticks{ 1800 };
+		u32 max_command_bytes{ 128 * 1024 };
 		u16 snapshot_chunk_bytes = 1000;
 		u16 max_clients = 0;
 		duration handshake_interval = duration::from_quantum(500'000'000);
@@ -119,6 +124,7 @@ namespace lf::lockstep {
 		void update();
 		void advance();
 		void disconnect();
+<<<<<<< Updated upstream
 		void disconnect_peer(SessionId session_id);
 		PayloadId submit(span<const byte> bytes);
 		vector<ReadyTick> take_ready_ticks();
@@ -126,6 +132,17 @@ namespace lf::lockstep {
 		void set_login_payload(span<const byte> bytes);
 		void accept_login(SessionId session_id, span<const byte> snapshot);
 		void reject_login(SessionId session_id);
+=======
+		void disconnect_peer(ID session_id);
+		identifier<Command, u64, void> submit(span<const byte> bytes);
+		void set_command_admitter(std::function<report<vector<byte>>(ID, span<const byte>)> admitter);
+		identifier<Command, u64, void> submit_authoritative(span<const byte> bytes);
+		vector<ReadyTick> take_ready_ticks();
+		vector<SessionEvent> take_events();
+		void set_login_payload(span<const byte> bytes);
+		void accept_login(ID session_id, Tick baseline, span<const byte> snapshot);
+		void reject_login(ID session_id, string_view reason = "login rejected");
+>>>>>>> Stashed changes
 		void finish_snapshot_load();
 
 		lockstep::mode mode() const;
@@ -148,4 +165,52 @@ namespace lf::lockstep {
 
 		std::unique_ptr<Impl, ImplDeleter> impl;
 	};
+<<<<<<< Updated upstream
+=======
+
+	struct Command {
+		using ID = identifier<Command, u64, void>;
+
+		ID id{};
+		Session::ID source{};
+		u64 hash = 0;
+		vector<byte> bytes;
+	};
+
+	struct ReadyTick {
+		Tick tick = 0;
+		vector<Command> commands;
+	};
+
+	struct PendingPayload {
+		Command::ID id{};
+		u64 hash = 0;
+		span<const byte> bytes;
+	};
+
+	enum class SessionEventKind : u08 {
+		login_requested = 1,
+		snapshot_received = 2,
+		peer_disconnected = 3,
+		disconnected = 4,
+		command_rejected = 5,
+	};
+
+	struct SessionEvent {
+		SessionEventKind kind = SessionEventKind::disconnected;
+		Session::ID session_id{};
+		Tick tick = 0;
+		vector<byte> bytes;
+		Command::ID command_id{};
+		string message;
+	};
+
+	struct SnapshotProgress {
+		Session::ID session_id{};
+		u32 chunks_done = 0;
+		u32 chunks_total = 0;
+		u64 bytes_done = 0;
+		u64 bytes_total = 0;
+	};
+>>>>>>> Stashed changes
 } // namespace lf::lockstep

@@ -12,7 +12,11 @@
 #include <utility>
 
 namespace lf::lockstep {
+<<<<<<< Updated upstream
 	constexpr u32 protocol_version = 6;
+=======
+	constexpr u32 protocol_version = 8;
+>>>>>>> Stashed changes
 
 	enum class packet_kind : u08 {
 		connect_request = 1,
@@ -98,15 +102,22 @@ namespace lf::lockstep {
 		vector<range> ranges;
 	};
 
+	struct rejected_command {
+		Command::ID id{};
+		string message;
+	};
+
 	struct client_to_server_heartbeat {
 		Tick client_tick = 0;
 		request_for_heartbeat requests;
 		vector<wire_payload> commands;
+		vector<Command::ID> rejection_acks;
 	};
 
 	struct server_to_client_heartbeat {
 		request_for_heartbeat requests;
 		vector<tick_closure> tick_closures;
+		vector<rejected_command> rejections;
 	};
 
 	struct pending_payload {
@@ -164,6 +175,8 @@ namespace lf::lockstep {
 		// "Saving the world for X" overlay up until the peer is actually
 		// playing.
 		bool client_heartbeat_seen = false;
+		vector<rejected_command> rejections;
+		Command::ID highest_payload{};
 	};
 
 	struct Session::Impl {
@@ -192,6 +205,11 @@ namespace lf::lockstep {
 		vector<ReadyTick> ready_ticks;
 		vector<SessionEvent> events;
 		vector<byte> login_payload;
+<<<<<<< Updated upstream
+=======
+		std::function<report<vector<byte>>(Session::ID, span<const byte>)> command_admitter;
+		bool admit(stored_payload& payload);
+>>>>>>> Stashed changes
 	};
 
 	struct offline_session final : Session::Impl {
@@ -217,9 +235,15 @@ namespace lf::lockstep {
 		host_connection& find_or_create_connection(const net::Peer& peer);
 		host_connection* find_connection(const net::Peer& peer, SessionId session_id);
 		void send_connect_accept(host_connection& connection);
+<<<<<<< Updated upstream
 		void accept_login(SessionId session_id, span<const byte> snapshot);
 		void reject_login(SessionId session_id);
 		void disconnect_peer(SessionId session_id);
+=======
+		void accept_login(Session::ID session_id, Tick baseline, span<const byte> snapshot);
+		void reject_login(Session::ID session_id, string_view reason = "login rejected");
+		void disconnect_peer(Session::ID session_id);
+>>>>>>> Stashed changes
 		void continue_snapshots();
 		void begin_snapshot(host_connection& connection);
 		void continue_snapshot(host_connection& connection);
@@ -286,12 +310,13 @@ namespace lf::lockstep {
 		vector<PacketSequence> pending_heartbeat_requests;
 		vector<heartbeat_request_record> requested_heartbeats;
 		vector<stored_payload> outgoing_commands;
+		vector<Command::ID> rejection_acks;
 		vector<stored_tick> buffered_ticks;
 		snapshot_download snapshot;
-		instant last_connect_activity = now();
-		instant next_connect_request = now();
-		instant next_join_request = now();
-		instant next_snapshot_request = now();
+		instant last_connect_activity = options.clock();
+		instant next_connect_request = options.clock();
+		instant next_join_request = options.clock();
+		instant next_snapshot_request = options.clock();
 		Tick next_pending_resend_tick = 0;
 	};
 } // namespace lf::lockstep
@@ -324,7 +349,7 @@ namespace lf::lockstep {
 		: peer(peer), session_id(session_id) {}
 
 	Session::Impl::Impl(lockstep::mode initial_mode, lockstep::state initial_state, Options options)
-		: session_mode(initial_mode), session_state(initial_state), options(options) {}
+		: session_mode{ initial_mode }, session_state{ initial_state }, options{ options }, current_tick{ options.initial_tick } {}
 
 	bool Session::Impl::waiting_for_response() const {
 		return false;
@@ -396,6 +421,7 @@ namespace lf::lockstep {
 		);
 	}
 
+<<<<<<< Updated upstream
 	template<bin::byte_stream Stream>
 	error process(Stream& stream, const wire_payload& payload) {
 		return stream(
@@ -416,6 +442,15 @@ namespace lf::lockstep {
 		IF_ERROR_RETURN_ERROR(stream(bin::field(name, wire_tick)));
 		tick = wire_tick;
 		return {};
+=======
+	template<bin::byte_stream Stream, bin::data<Tick> Value>
+	error stream_tick(Stream& stream, const char* name, Value& value) {
+		return stream(field(name, value));
+	}
+	template<bin::byte_stream Stream, bin::data<PacketSequence> Value>
+	error stream_packet_sequence(Stream& stream, const char* name, Value& value) {
+		return stream(field(name, value));
+>>>>>>> Stashed changes
 	}
 
 	error stream_packet_sequence(bin::write_stream& stream, const char* name, PacketSequence sequence) {
@@ -444,12 +479,31 @@ namespace lf::lockstep {
 
 	template<bin::byte_stream Stream>
 	error process(Stream& stream, request_for_heartbeat& requests) {
+<<<<<<< Updated upstream
 		vector<u32> wire_sequences;
 		IF_ERROR_RETURN_ERROR(stream(bin::field("sequences", wire_sequences)));
 		requests.sequences.clear();
 		requests.sequences.reserve(wire_sequences.size());
 		for (u32 sequence : wire_sequences) {
 			requests.sequences.emplace_back(sequence);
+=======
+		vector<u64> wire_sequences;
+		if constexpr (bin::writable_byte_stream<Stream>) {
+			wire_sequences.reserve(requests.sequences.size());
+			for (PacketSequence sequence : requests.sequences) {
+				wire_sequences.emplace_back(static_cast<u64>(sequence));
+			}
+		}
+		if (auto err = stream(field("sequences", wire_sequences)); err) {
+			return err;
+		}
+		if constexpr (bin::readable_byte_stream<Stream>) {
+			requests.sequences.clear();
+			requests.sequences.reserve(wire_sequences.size());
+			for (u32 sequence : wire_sequences) {
+				requests.sequences.emplace_back(sequence);
+			}
+>>>>>>> Stashed changes
 		}
 		return {};
 	}
@@ -488,11 +542,32 @@ namespace lf::lockstep {
 		);
 	}
 
+<<<<<<< Updated upstream
 	template<bin::byte_stream Stream>
 	error process(Stream& stream, const transfer_block_requests& requests) {
 		return stream(
 			bin::field("snapshot_id", requests.snapshot_id),
 			bin::field("ranges", requests.ranges)
+=======
+	template<bin::byte_stream Stream, bin::data<rejected_command> Value>
+	error process(Stream& stream, Value& value) {
+		return stream(field("id", value.id), field("message", value.message));
+	}
+
+	template<bin::byte_stream Stream, bin::data<client_to_server_heartbeat> client_to_server_heartbeat>
+	error process(Stream& stream, client_to_server_heartbeat& heartbeat) {
+		u64 client_tick{ heartbeat.client_tick };
+		if (auto err = stream(field("client_tick", client_tick)); err) {
+			return err;
+		}
+		if constexpr (bin::readable_byte_stream<Stream>) {
+			heartbeat.client_tick = client_tick;
+		}
+		return stream(
+			field("requests", heartbeat.requests),
+			field("commands", heartbeat.commands),
+			field("rejection_acks", heartbeat.rejection_acks)
+>>>>>>> Stashed changes
 		);
 	}
 
@@ -517,6 +592,7 @@ namespace lf::lockstep {
 	template<bin::byte_stream Stream>
 	error process(Stream& stream, server_to_client_heartbeat& heartbeat) {
 		return stream(
+<<<<<<< Updated upstream
 			bin::field("requests", heartbeat.requests),
 			bin::field("tick_closures", heartbeat.tick_closures)
 		);
@@ -527,6 +603,11 @@ namespace lf::lockstep {
 		return stream(
 			bin::field("requests", heartbeat.requests),
 			bin::field("tick_closures", heartbeat.tick_closures)
+=======
+			field("requests", heartbeat.requests),
+			field("tick_closures", heartbeat.tick_closures),
+			field("rejections", heartbeat.rejections)
+>>>>>>> Stashed changes
 		);
 	}
 
@@ -632,6 +713,9 @@ namespace lf::lockstep {
 		if (sequence == 0) {
 			return record;
 		}
+		if (sequence > received.next_expected + 2048) {
+			throw runtime_exception("heartbeat sequence is outside the receive window");
+		}
 		received.latest_received = std::max(received.latest_received, sequence);
 
 		if (sequence < received.next_expected) {
@@ -711,8 +795,13 @@ namespace lf::lockstep {
 	template<typename Writer>
 	vector<byte> write_connected_packet(packet_kind kind, SessionId session_id, PacketSequence packet_sequence, Writer writer) {
 		return write_packet(kind, [&](bin::write_stream& stream) -> error {
+<<<<<<< Updated upstream
 			const u32 wire_session_id = static_cast<u32>(session_id);
 			const u32 wire_packet_sequence = static_cast<u32>(packet_sequence);
+=======
+			const u64 wire_session_id = session_id.get();
+			const u64 wire_packet_sequence = packet_sequence;
+>>>>>>> Stashed changes
 			IF_ERROR_RETURN_ERROR(stream(
 				bin::field("session_id", wire_session_id),
 				bin::field("packet_sequence", wire_packet_sequence)
@@ -721,9 +810,15 @@ namespace lf::lockstep {
 		});
 	}
 
+<<<<<<< Updated upstream
 	error read_connected_header(bin::read_stream& stream, SessionId& session_id, PacketSequence& packet_sequence) {
 		u32 wire_session_id = 0;
 		u32 wire_packet_sequence = 0;
+=======
+	error read_connected_header(bin::read_stream& stream, Session::ID& session_id, PacketSequence& packet_sequence) {
+		u64 wire_session_id = 0;
+		u64 wire_packet_sequence = 0;
+>>>>>>> Stashed changes
 		IF_ERROR_RETURN_ERROR(stream(
 			bin::field("session_id", wire_session_id),
 			bin::field("packet_sequence", wire_packet_sequence)
@@ -825,12 +920,12 @@ namespace lf::lockstep {
 			}
 			u16 joined_clients = 0;
 			for (const host_connection& existing : session.connections) {
-				if (existing.connection_state == state::joined) {
+				if (existing.connection_state != state::disconnected && existing.session_id != session_id) {
 					++joined_clients;
 				}
 			}
 			if (session.options.max_clients != 0 && joined_clients >= session.options.max_clients) {
-				session.reject_login(session_id);
+				session.reject_login(session_id, reason);
 				return {};
 			}
 			session.push_event(SessionEvent{
@@ -867,13 +962,40 @@ namespace lf::lockstep {
 			if (!record.fresh) {
 				return {};
 			}
+			for (const auto id : heartbeat.rejection_acks) {
+				std::erase_if(connection->rejections, [id](const auto& value) { return value.id == id; });
+			}
+			if (heartbeat.client_tick + session.options.max_buffered_ticks < session.current_tick) {
+				session.reject_login(connection->session_id, "client fell behind retained history");
+				return {};
+			}
 			for (const wire_payload& payload : heartbeat.commands) {
-				if (!remember_received_payload(*connection, payload.id)) {
+				if (payload.id.get() + 4096 < connection->highest_payload.get() || !remember_received_payload(*connection, payload.id)) {
 					continue;
 				}
+<<<<<<< Updated upstream
 				vector<stored_payload> scheduled;
 				scheduled.emplace_back(from_wire_payload(payload, connection->session_id));
 				session.schedule_commands(std::move(scheduled));
+=======
+				if (payload.id.get() > connection->highest_payload.get()) {
+					connection->highest_payload = payload.id;
+				}
+				auto accepted = payload.bytes.size() > session.options.max_command_bytes
+					? report<vector<byte>>{ unexpected(error{ generic_errc::input_error, "command exceeds size limit" }) }
+					: session.command_admitter ? session.command_admitter(connection->session_id, payload.bytes) : report<vector<byte>>{ payload.bytes };
+				if (!accepted) {
+					if (connection->rejections.size() >= 128) {
+						session.reject_login(connection->session_id, "too many unacknowledged commands");
+						return {};
+					}
+					connection->rejections.push_back({ payload.id, accepted.error().message });
+					continue;
+				}
+				auto command = from_wire_payload(payload, connection->session_id);
+				command.bytes = std::move(*accepted);
+				session.schedule_commands({ std::move(command) });
+>>>>>>> Stashed changes
 			}
 			return {};
 		}
@@ -936,8 +1058,13 @@ namespace lf::lockstep {
 		switch (kind) {
 		case packet_kind::connect_accept: {
 			PacketSequence packet_sequence = 0;
+<<<<<<< Updated upstream
 			SessionId accepted_session_id = 0;
 			u32 wire_session_id = 0;
+=======
+			Session::ID accepted_session_id{};
+			u64 wire_session_id = 0;
+>>>>>>> Stashed changes
 			u32 version = 0;
 			IF_ERROR_RETURN_ERROR(stream_packet_sequence(stream, "packet_sequence", packet_sequence));
 			IF_ERROR_RETURN_ERROR(stream(bin::field("protocol_version", version)));
@@ -954,7 +1081,7 @@ namespace lf::lockstep {
 			session.local_session = accepted_session_id;
 			if (session.session_state == state::connecting) {
 				session.session_state = state::logging_in;
-				session.next_join_request = now();
+				session.next_join_request = session.options.clock();
 			}
 			return {};
 		}
@@ -989,6 +1116,9 @@ namespace lf::lockstep {
 			session.snapshot.baseline_tick = baseline_tick;
 			session.snapshot.chunk_size = session.options.snapshot_chunk_bytes == 0 ? 1000 : session.options.snapshot_chunk_bytes;
 			session.snapshot.chunk_count = chunk_count;
+			if (!total_bytes || total_bytes > session.options.max_snapshot_bytes || chunk_count != (total_bytes + session.snapshot.chunk_size - 1) / session.snapshot.chunk_size) {
+				return { generic_errc::parse_error, "invalid snapshot size" };
+			}
 			session.snapshot.bytes.resize(static_cast<size_t>(total_bytes));
 			session.snapshot.received_chunks.resize(chunk_count);
 			session.snapshot.requested_chunks.resize(chunk_count);
@@ -1014,7 +1144,7 @@ namespace lf::lockstep {
 				return {};
 			}
 			const size_t offset = static_cast<size_t>(chunk_index) * session.snapshot.chunk_size;
-			if (offset + bytes.size() > session.snapshot.bytes.size()) {
+			if (offset > session.snapshot.bytes.size() || bytes.size() != std::min<usize>(session.snapshot.chunk_size, session.snapshot.bytes.size() - offset)) {
 				return {};
 			}
 			std::copy(bytes.begin(), bytes.end(), session.snapshot.bytes.begin() + static_cast<i64>(offset));
@@ -1060,6 +1190,18 @@ namespace lf::lockstep {
 			if (!record.fresh) {
 				return {};
 			}
+			for (const auto& rejected : heartbeat.rejections) {
+				const auto pending{ std::find_if(session.pending_payloads.begin(), session.pending_payloads.end(), [&](const auto& value) { return value.id == rejected.id; }) };
+				if (pending != session.pending_payloads.end()) {
+					session.pending_payloads.erase(pending);
+					session.rebuild_pending_views();
+					session.push_event(SessionEvent{ .kind = SessionEventKind::command_rejected, .command_id = rejected.id, .message = rejected.message });
+				}
+				if (std::find(session.rejection_acks.begin(), session.rejection_acks.end(), rejected.id) == session.rejection_acks.end()) {
+					session.rejection_acks.push_back(rejected.id);
+					if (session.rejection_acks.size() > 256) { session.rejection_acks.erase(session.rejection_acks.begin()); }
+				}
+			}
 			for (const tick_closure& closure : heartbeat.tick_closures) {
 				session.buffer_tick(closure);
 			}
@@ -1080,13 +1222,15 @@ namespace lf::lockstep {
 			SessionId session_id = 0;
 			PacketSequence packet_sequence = 0;
 			IF_ERROR_RETURN_ERROR(read_connected_header(stream, session_id, packet_sequence));
+			string reason;
+			if (stream.remaining()) { IF_ERROR_RETURN_ERROR(stream(field("reason", reason))); }
 			if (session.valid_session(session_id)) {
 				session.send_connected(packet_kind::disconnect_ack, [](bin::write_stream&) -> error {
 					return {};
 				});
 				session.socket.disconnect();
 				session.session_state = state::disconnected;
-				session.push_event(SessionEvent{ .kind = SessionEventKind::disconnected });
+				session.push_event(SessionEvent{ .kind = SessionEventKind::disconnected, .message = reason });
 			}
 			return {};
 		}
@@ -1128,8 +1272,15 @@ namespace lf::lockstep {
 			throw runtime_exception("lockstep session is not joined");
 		}
 		stored_payload payload = make_payload(bytes, host_session_id, true);
+<<<<<<< Updated upstream
 		const PayloadId id = payload.id;
 		staged_commands.emplace_back(std::move(payload));
+=======
+		const Command::ID id = payload.id;
+		if (admit(payload)) {
+			staged_commands.emplace_back(std::move(payload));
+		}
+>>>>>>> Stashed changes
 		return id;
 	}
 
@@ -1189,7 +1340,12 @@ namespace lf::lockstep {
 				server_to_client_heartbeat heartbeat;
 				heartbeat.requests.sequences = take_heartbeat_requests(connection.pending_heartbeat_requests);
 				heartbeat.tick_closures.emplace_back(closure);
+<<<<<<< Updated upstream
 				return stream(bin::field("heartbeat", heartbeat));
+=======
+				heartbeat.rejections = connection.rejections;
+				return stream(field("heartbeat", heartbeat));
+>>>>>>> Stashed changes
 			});
 			remember_sent_packet(connection.sent_heartbeats, heartbeat_sequence, send_queue.back().bytes);
 		}
@@ -1198,49 +1354,10 @@ namespace lf::lockstep {
 	}
 
 	void host_session::disconnect() {
-		if (session_state == state::disconnected) {
-			return;
-		}
-		auto all_disconnects_acknowledged = [&] {
-			for (const host_connection& connection : connections) {
-				if (!connection.disconnect_acknowledged) {
-					return false;
-				}
-			}
-			return true;
-		};
-		auto send_disconnects = [&] {
-			for (host_connection& connection : connections) {
-				if (connection.disconnect_acknowledged) {
-					continue;
-				}
-				const PacketSequence packet_sequence = connection.next_send_sequence;
-				++connection.next_send_sequence;
-				vector<byte> bytes = write_connected_packet(packet_kind::disconnect, connection.session_id, packet_sequence, [](bin::write_stream&) -> error {
-					return {};
-				});
-				socket.send(connection.peer, bytes_view(bytes));
-			}
-		};
-
-		for (host_connection& connection : connections) {
-			connection.disconnect_acknowledged = false;
-		}
-
-		instant next_send = now();
-		const i64 timeout_quantums = std::max<i64>(250'000'000, options.handshake_interval.quantum_count() * 5);
-		const instant deadline = next_send + duration::from_quantum(timeout_quantums);
-		const u32 max_attempts = std::max<u32>(1, static_cast<u32>(timeout_quantums / std::max<i64>(1, options.nack_interval.quantum_count())) + 1);
-		u32 attempts = 0;
-		while (!all_disconnects_acknowledged() && !(now() >= deadline) && attempts < max_attempts) {
-			const instant current_time = now();
-			if (current_time >= next_send) {
-				send_disconnects();
-				next_send = current_time + options.nack_interval;
-				++attempts;
-			}
-			poll_socket();
-			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		if (session_state == state::disconnected) { return; }
+		for (auto& connection : connections) {
+			const auto bytes = write_connected_packet(packet_kind::disconnect, connection.session_id, connection.next_send_sequence++, [](bin::write_stream&) -> error { return {}; });
+			socket.send(connection.peer, bytes);
 		}
 		socket.disconnect();
 		session_state = state::disconnected;
@@ -1253,8 +1370,15 @@ namespace lf::lockstep {
 		}
 		vector<stored_payload> collected;
 		collected.emplace_back(make_payload(bytes, host_session_id, true));
+<<<<<<< Updated upstream
 		const PayloadId id = collected.back().id;
 		schedule_commands(std::move(collected));
+=======
+		const Command::ID id = collected.back().id;
+		if (admit(collected.back())) {
+			schedule_commands(std::move(collected));
+		}
+>>>>>>> Stashed changes
 		return id;
 	}
 
@@ -1274,7 +1398,7 @@ namespace lf::lockstep {
 	}
 
 	void host_session::receive_message(const net::Message& message) {
-		bin::read_stream stream(message.second);
+		bin::read_stream stream{ message.second, { .max_string_bytes = 128 * 1024, .max_vector_elements = 1024 * 1024 } };
 		if (error err = process(stream, *this, message.first)) {
 			throw runtime_exception(err.message);
 		}
@@ -1305,7 +1429,11 @@ namespace lf::lockstep {
 		const PacketSequence packet_sequence = connection.next_send_sequence;
 		++connection.next_send_sequence;
 		vector<byte> bytes = write_packet(packet_kind::connect_accept, [&](bin::write_stream& stream) -> error {
+<<<<<<< Updated upstream
 			const u32 wire_session_id = static_cast<u32>(connection.session_id);
+=======
+			const u64 wire_session_id = static_cast<u32>(connection.session_id.get());
+>>>>>>> Stashed changes
 			IF_ERROR_RETURN_ERROR(stream_packet_sequence(stream, "packet_sequence", packet_sequence));
 			IF_ERROR_RETURN_ERROR(stream(bin::field("protocol_version", protocol_version)));
 			return stream(bin::field("session_id", wire_session_id));
@@ -1315,7 +1443,11 @@ namespace lf::lockstep {
 		remember_sent_packet(connection.sent_packets, packet_sequence, bytes);
 	}
 
+<<<<<<< Updated upstream
 	void host_session::accept_login(SessionId session_id, span<const byte> snapshot) {
+=======
+	void host_session::accept_login(Session::ID session_id, Tick baseline, span<const byte> snapshot) {
+>>>>>>> Stashed changes
 		for (host_connection& connection : connections) {
 			if (connection.session_id != session_id) {
 				continue;
@@ -1323,11 +1455,29 @@ namespace lf::lockstep {
 			connection.connection_state = state::downloading_snapshot;
 			connection.snapshot_requested = true;
 			connection.snapshot_bytes.assign(snapshot.begin(), snapshot.end());
+<<<<<<< Updated upstream
+=======
+			connection.snapshot_baseline_tick = baseline;
+>>>>>>> Stashed changes
 			return;
 		}
 	}
 
+<<<<<<< Updated upstream
 	void host_session::reject_login(SessionId session_id) {
+=======
+	void host_session::reject_login(Session::ID session_id, string_view reason) {
+		for (auto& connection : connections) {
+			if (connection.session_id == session_id) {
+				auto bytes = write_connected_packet(packet_kind::disconnect, session_id, connection.next_send_sequence++, [&](bin::write_stream& stream) {
+					string message{ reason };
+					return stream(field("reason", message));
+				});
+				socket.send(connection.peer, bytes);
+				break;
+			}
+		}
+>>>>>>> Stashed changes
 		disconnect_peer(session_id);
 	}
 
@@ -1526,7 +1676,7 @@ namespace lf::lockstep {
 				session_state = state::joined;
 			}
 		}
-		const instant current_time = now();
+		const instant current_time = options.clock();
 		const duration time_since_activity = duration::from_quantum(current_time.quantum_count() - last_connect_activity.quantum_count());
 		if ((session_state == state::connecting ||
 			 session_state == state::logging_in ||
@@ -1620,8 +1770,8 @@ namespace lf::lockstep {
 	}
 
 	void client_session::receive_message(const net::Message& message) {
-		bin::read_stream stream(message.second);
-		last_connect_activity = now();
+		bin::read_stream stream{ message.second, { .max_string_bytes = 128 * 1024, .max_vector_elements = 1024 * 1024 } };
+		last_connect_activity = options.clock();
 		if (error err = process(stream, *this, message.first)) {
 			throw runtime_exception(err.message);
 		}
@@ -1635,6 +1785,9 @@ namespace lf::lockstep {
 			if (existing.tick == closure.tick) {
 				return;
 			}
+		}
+		if (buffered_ticks.size() >= options.max_buffered_ticks || closure.tick > current_tick + options.max_buffered_ticks) {
+			throw runtime_exception("client exceeded the catch-up window");
 		}
 		stored_tick tick;
 		tick.tick = closure.tick;
@@ -1770,6 +1923,7 @@ namespace lf::lockstep {
 		const bool sent_commands = !outgoing_commands.empty();
 		client_to_server_heartbeat heartbeat;
 		heartbeat.client_tick = current_tick;
+		heartbeat.rejection_acks = rejection_acks;
 		heartbeat.requests.sequences = take_heartbeat_requests(pending_heartbeat_requests);
 		heartbeat.commands.reserve(outgoing_commands.size());
 		for (const stored_payload& command : outgoing_commands) {
@@ -1826,7 +1980,7 @@ namespace lf::lockstep {
 			options.connect_timeout.quantum_count(),
 			std::max<i64>(1'000'000'000, options.handshake_interval.quantum_count() * 2)
 		);
-		const instant current_time = now();
+		const instant current_time = options.clock();
 		const duration time_since_activity = duration::from_quantum(current_time.quantum_count() - last_connect_activity.quantum_count());
 		return time_since_activity >= duration::from_quantum(warning_quantums);
 	}
@@ -1912,6 +2066,43 @@ namespace lf::lockstep {
 		}
 		return impl->submit(bytes);
 	}
+<<<<<<< Updated upstream
+=======
+	bool Session::Impl::admit(stored_payload& payload) {
+		auto accepted = payload.bytes.size() > options.max_command_bytes
+			? report<vector<byte>>{ unexpected(error{ generic_errc::input_error, "command exceeds size limit" }) }
+			: command_admitter ? command_admitter(payload.source, payload.bytes) : report<vector<byte>>{ payload.bytes };
+		if (!accepted) {
+			std::erase_if(pending_payloads, [&](const auto& value) { return value.id == payload.id; });
+			rebuild_pending_views();
+			push_event(SessionEvent{ .kind = SessionEventKind::command_rejected, .command_id = payload.id, .message = accepted.error().message });
+			return false;
+		}
+		payload.bytes = std::move(*accepted);
+		return true;
+	}
+
+	void Session::set_command_admitter(std::function<report<vector<byte>>(ID, span<const byte>)> admitter) {
+		if (!impl || impl->session_mode == mode::client) {
+			throw runtime_exception("command admission belongs to the authority");
+		}
+		impl->command_admitter = std::move(admitter);
+	}
+
+	Command::ID Session::submit_authoritative(span<const byte> bytes) {
+		if (!impl || impl->session_mode == mode::client || bytes.size() > impl->options.max_command_bytes) {
+			throw runtime_exception("invalid authoritative command submission");
+		}
+		auto payload = impl->make_payload(bytes, ID{}, false);
+		const auto id{ payload.id };
+		if (impl->session_mode == mode::offline) {
+			static_cast<offline_session&>(*impl).staged_commands.push_back(std::move(payload));
+		} else {
+			static_cast<host_session&>(*impl).schedule_commands({ std::move(payload) });
+		}
+		return id;
+	}
+>>>>>>> Stashed changes
 
 	vector<ReadyTick> Session::take_ready_ticks() {
 		if (!impl) {
@@ -1998,18 +2189,26 @@ namespace lf::lockstep {
 		impl->login_payload.assign(bytes.begin(), bytes.end());
 	}
 
+<<<<<<< Updated upstream
 	void Session::accept_login(SessionId session_id, span<const byte> snapshot) {
+=======
+	void Session::accept_login(ID session_id, Tick baseline, span<const byte> snapshot) {
+>>>>>>> Stashed changes
 		if (!impl || impl->session_mode != mode::host) {
 			throw runtime_exception("only host lockstep sessions can accept logins");
 		}
-		static_cast<host_session&>(*impl).accept_login(session_id, snapshot);
+		static_cast<host_session&>(*impl).accept_login(session_id, baseline, snapshot);
 	}
 
+<<<<<<< Updated upstream
 	void Session::reject_login(SessionId session_id) {
+=======
+	void Session::reject_login(ID session_id, string_view reason) {
+>>>>>>> Stashed changes
 		if (!impl || impl->session_mode != mode::host) {
 			throw runtime_exception("only host lockstep sessions can reject logins");
 		}
-		static_cast<host_session&>(*impl).reject_login(session_id);
+		static_cast<host_session&>(*impl).reject_login(session_id, reason);
 	}
 
 	void Session::finish_snapshot_load() {

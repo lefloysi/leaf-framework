@@ -1,13 +1,24 @@
 #ifndef LEAF_GRAPHICS_WINDOW_HPP
 #define LEAF_GRAPHICS_WINDOW_HPP
 
+<<<<<<< Updated upstream:include/leaf/graphics/window.hpp
+=======
+#include <leaf/core/array.hpp>
+#include <leaf/core/math/dim.hpp>
+#include <leaf/core/math/pos.hpp>
+>>>>>>> Stashed changes:include/leaf/application/window.hpp
 #include <leaf/core/string.hpp>
+#include <leaf/core/vector.hpp>
 #include <leaf/graphics/resource.hpp>
 #include <leaf/math/dim.hpp>
 #include <leaf/math/pos.hpp>
 #include <leaf/resource/prototypes/cursor.hpp>
 
+<<<<<<< Updated upstream:include/leaf/graphics/window.hpp
 #include <vector>
+=======
+#include <mutex>
+>>>>>>> Stashed changes:include/leaf/application/window.hpp
 
 namespace lf {
 	bool SetCursorPrototype(rt::view<rt::window> display, CursorPrototype::ID id);
@@ -287,4 +298,47 @@ namespace rt {
 
 } // namespace rt
 
+<<<<<<< Updated upstream:include/leaf/graphics/window.hpp
 #endif /* LEAF_GRAPHICS_WINDOW_HPP */
+=======
+		void on_control(input_control control, bool down, input_modifiers modifiers);
+		void on_text(u32 character);
+		void on_cursor(pos2<f32> position);
+		void on_cursor_enter(bool entered);
+		void on_scroll(pos2<f32> delta);
+		void on_focus(bool focused);
+		void on_drop(string_view path);
+
+	  private:
+		static constexpr size_t control_count = KEY_ENUM_MAX + BUTTON_ENUM_MAX;
+		static size_t control_index(input_control control);
+		void discard_frame();
+
+		PlatformWindow* platform = nullptr;
+		rt::unique<rt::swapchain> swapchain;
+		rt::unique<rt::queue> queue;
+		rt::unique<rt::command_buffer> frame_command_buffer;
+
+		rt::view<rt::framebuffer> frame_buffer;
+		rt::timepoint frame_rendered;
+		bool frame_submitted = false;
+
+		dim2<u32> extent = { 1280, 720 };
+		pos2<f32> position = { 100, 100 };
+		pos2<f32> cursor_position{};
+		CursorPrototype::ID current_cursor;
+
+		array<input_state, control_count> controls{};
+		vector<input_event> events;
+		bool cursor_inside = false;
+		bool fullscreen_enabled = false;
+		bool vsync_enabled = false;
+		input_modifiers modifiers{};
+
+		mutable std::mutex input_mutex;
+	};
+
+} // namespace lf
+
+#endif /* LEAF_APPLICATION_WINDOW_HPP */
+>>>>>>> Stashed changes:include/leaf/application/window.hpp

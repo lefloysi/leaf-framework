@@ -1,0 +1,20 @@
+#pragma once
+
+#include "application/rml/file_interface.hpp"
+#include "application/rml/render_interface.hpp"
+#include "application/rml/system_interface.hpp"
+#include "leaf/application/rml.hpp"
+#include "leaf/core/error.hpp"
+#include "leaf/core/span.hpp"
+#include "leaf/core/string.hpp"
+
+namespace lf {
+	struct RmlBackend {
+		Renderer renderer;
+		RmlSystem system;
+		RmlFile file;
+	};
+
+	extern unique_ptr<RmlBackend> rml_backend;
+
+} // namespace lf

@@ -6,6 +6,7 @@
 #include "leaf/network/peer.hpp"
 
 #include <utility>
+#include <functional>
 
 namespace lf::net {
 	using Message = std::pair<Peer, span<const byte>>;
@@ -16,6 +17,11 @@ namespace lf::net {
 
 		static Socket Port(u16 port);
 		static Socket Channel(u16 channel);
+		struct Callbacks {
+			std::function<void(const Peer&, span<const byte>)> send;
+			std::function<optional<Message>(span<byte>)> receive;
+		};
+		static Socket Custom(Callbacks callbacks);
 
 		Socket(const Socket&) = delete;
 		Socket& operator=(const Socket&) = delete;
