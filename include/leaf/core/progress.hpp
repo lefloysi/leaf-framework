@@ -3,7 +3,6 @@
 #include "leaf/core/normalized.hpp"
 #include "leaf/core/memory.hpp"
 #include "leaf/core/string.hpp"
-#include "leaf/core/unordered_map.hpp"
 #include "leaf/core/vector.hpp"
 
 #include <memory>
@@ -11,11 +10,6 @@
 #include <utility>
 
 namespace lf {
-	struct ProgressEntry {
-		string text;
-		f32 value = 0.0f;
-	};
-
 	struct Progress {
 		std::stop_token stop;
 
@@ -34,6 +28,8 @@ namespace lf {
 
 		vector<Progress> split(string_view label, size_t count, u64 weight = 1);
 
+		void add_total(u64 amount);
+		void advance(u64 amount = 1);
 		void set(normalized<u32> value);
 
 		vector<string> path() const;
@@ -44,23 +40,6 @@ namespace lf {
 		bool valid() const;
 		bool cancelled() const;
 
-		void set(string_view name, string_view text, f32 value);
-		bool try_get(string_view name, ProgressEntry& entry) const;
-
-		class Scope {
-		  public:
-			Scope(Progress& owner, string_view name, u32 count);
-			void major(string_view text, u32 index);
-			void minor(string_view text, f32 value);
-
-		  private:
-			Progress& owner;
-			string name;
-			u32 count;
-			u32 current = 0;
-		};
-		Scope scope(string_view name, u32 count);
-
 	  private:
 		struct Shared;
 		struct Node;
@@ -68,8 +47,6 @@ namespace lf {
 		std::shared_ptr<Shared> shared;
 		unique_ptr<Node> owned;
 		Node* node = nullptr;
-		unordered_map<string, ProgressEntry> entries;
-
 		Progress(std::shared_ptr<Shared> shared, unique_ptr<Node> owned, Node* node, std::stop_token stop);
 
 		static f32 value_locked(const Node& value_node);

@@ -8,33 +8,33 @@
 #include <rutile.h>
 
 #include <cstdlib>
+#include <iterator>
 
 namespace rt {
-	namespace {
-		constexpr string_view DefaultGraphicsAPI = "rt-vulkan";
-		error parse_graphics_backend(span<string_view> args, string_view& backend) {
-			for (size_t i = 0; i < args.size(); ++i) {
-				string_view arg = args[i];
-				if (arg == "-g" || arg == "--graphics") {
-					if (i + 1 == args.size() || args[i + 1].empty() || args[i + 1].front() == '-') {
-						return error(generic_errc::input_error, "missing value for -g/--graphics");
-					}
-					backend = args[++i];
-					continue;
-				}
+	constexpr string_view DefaultGraphicsAPI = "rt-vulkan";
 
-				constexpr string_view LongPrefix = "--graphics=";
-				if (arg.starts_with(LongPrefix)) {
-					string_view value = arg.substr(LongPrefix.size());
-					if (value.empty()) {
-						return error(generic_errc::input_error, "missing value for --graphics");
-					}
-					backend = value;
+	error parse_graphics_backend(span<string_view> args, string_view& backend) {
+		for (size_t i = 0; i < args.size(); ++i) {
+			string_view arg = args[i];
+			if (arg == "-g" || arg == "--graphics") {
+				if (i + 1 == args.size() || args[i + 1].empty() || args[i + 1].front() == '-') {
+					return error(generic_errc::input_error, "missing value for -g/--graphics");
 				}
+				backend = args[++i];
+				continue;
 			}
-			return error::no_error;
+
+			constexpr string_view LongPrefix = "--graphics=";
+			if (arg.starts_with(LongPrefix)) {
+				string_view value = arg.substr(LongPrefix.size());
+				if (value.empty()) {
+					return error(generic_errc::input_error, "missing value for --graphics");
+				}
+				backend = value;
+			}
 		}
-	} // namespace
+		return error::no_error;
+	}
 
 	void rutile_log_output(const char* message, void*) {
 		if (!message || !message[0]) {
@@ -115,27 +115,28 @@ namespace rt {
 		return rutile_error(rtError(), "Rutile call");
 	}
 
-	error init_graphics(span<string_view> args, bool headless) {
+	error init_graphics(span<string_view> args) {
 		lf::log::Info("[leaf] Starting graphics...");
 		string_view graphics_api = DefaultGraphicsAPI;
 		if (error err = parse_graphics_backend(args, graphics_api)) {
 			return err;
 		}
 		lf::log::Debug("[leaf] Graphics init for '{}'", graphics_api);
-		if (auto err = rtLoad(graphics_api.data(), nullptr, 0)) {
+		#if defined(_DEBUG)
+		const char* layers[]{ "rt-validation-layer" };
+		const auto load_result{ rtLoadDevelopment(graphics_api.data(), layers, std::size(layers)) };
+		#else
+		const auto load_result{ rtLoad(graphics_api.data(), nullptr, 0) };
+		#endif
+
+		if (load_result) {
 			lf::log::Error("[leaf] Failed to load graphics backend '{}'", graphics_api);
 			return error(generic_errc::unknown, "rtLoad failed");
 		}
 		lf::log::Debug("[leaf] Loaded graphics backend '{}'", graphics_api);
 		rtSetOutput(rutile_log_output, nullptr);
-		if (headless) {
-			lf::log::Debug("[leaf] Initializing '{}' without features.", graphics_api);
-			rtInit(nullptr, 0);
-		} else {
-			const char* features[] = { RT_FEATURE_PRESENTATION };
-			lf::log::Debug("[leaf] Initializing '{}' with presentation feature.", graphics_api);
-			rtInit(features, 1);
-		}
+		const char* features[]{ RT_FEATURE_PRESENTATION };
+		rtInit(features, 1);
 
 		error err = rutile_error(rtError(), "rtInit");
 		if (err) {
@@ -146,14 +147,17 @@ namespace rt {
 		return error::no_error;
 	}
 
-	error init_graphics_extensions(bool headless) {
-		if (!headless) {
+	error init_graphics_extensions() {
+
 			rtLoadSwapchain();
-			if (error err = rutile_error(rtError(), "rtLoadSwapchain")) return err;
+			if (error err = rutile_error(rtError(), "rtLoadSwapchain")) {
+				return err;
+			}
 			rtLoadGlfwSwapchain();
-			if (error err = rutile_error(rtError(), "rtLoadGlfwSwapchain")) return err;
+			if (error err = rutile_error(rtError(), "rtLoadGlfwSwapchain")) {
+				return err;
+			}
 			lf::log::Trace("[leaf] Loaded Rutile swapchain and GLFW presentation extensions");
-		}
 		return error::no_error;
 	}
 
@@ -169,3 +173,5 @@ namespace rt {
 
 	string_view GraphicsBackendName() { return rtGetName(); }
 } // namespace rt
+
+

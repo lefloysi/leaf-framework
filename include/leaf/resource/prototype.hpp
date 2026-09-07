@@ -55,6 +55,7 @@ namespace lf {
 
 	template<typename T>
 	struct Prototype : public PrototypeBase {
+		using prototype_marker = void;
 		Prototype(const dict& data) : PrototypeBase(data) {}
 		virtual ~Prototype() = default;
 		using ID = T;

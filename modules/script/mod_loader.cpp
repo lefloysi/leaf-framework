@@ -6,12 +6,14 @@
 #include "leaf/resource/prototypes/texture.hpp"
 #include "leaf/resource/registry.hpp"
 #include "leaf/script/settings.hpp"
-#include "leaf/script/virtual_filesystem.hpp"
+#include "leaf/core/filesystem.hpp"
+#include "leaf/core/scope.hpp"
 
 #include <leaf/graphics/graphics.hpp>
 #include <leaf/graphics/queue.hpp>
 
 #include <sol/sol.hpp>
+#include <sol/utility/is_integer.hpp>
 #include <yaml-cpp/yaml.h>
 
 #include <algorithm>
@@ -19,33 +21,33 @@
 #include <fstream>
 #include <functional>
 #include <limits>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 
 namespace lf {
+	object Options;
+
 	namespace detail {
 		struct ModSettings {
 			std::unordered_map<string, object> values;
 			std::unordered_map<string, string> input;
 		};
 
-		object loaded_options;
 		vector<ModInfo> loaded_mods;
+		vector<fs::mapping> mod_mappings;
 		dict loaded_startup_settings;
 		std::unordered_map<string, ModSettings> loaded_settings;
 
 		fs::path settings_path(string_view mod_name) {
-			return fs::folder::appdata / "settings" / (string(mod_name.empty() ? "core" : mod_name) + ".yaml");
+			return fs::path("/settings").append(string(mod_name.empty() ? "core" : mod_name) + ".yaml");
 		}
 
 		error write_mod_settings(string_view mod_name) {
 			const fs::path path = settings_path(mod_name);
-			std::error_code ec;
-			fs::create_directories(path.parent_path(), ec);
-			if (ec) {
-				return error(generic_errc::input_error, lf::format("failed to create '{}': {}", path.parent_path().string(), ec.message()));
+			if (report<void> created = fs::create_directories(path.parent()); !created) {
+				return created.error();
 			}
-
 			const ModSettings& settings = loaded_settings[string(mod_name)];
 			YAML::Emitter out;
 			out << YAML::BeginMap;
@@ -61,12 +63,12 @@ namespace lf {
 			}
 			out << YAML::EndMap;
 			out << YAML::EndMap;
-			std::ofstream file(path, std::ios::binary);
-			if (!file) {
-				return error(generic_errc::input_error, lf::format("failed to write '{}'", path.string()));
+			string text(out.c_str());
+			const auto* bytes = reinterpret_cast<const u08*>(text.data());
+			if (auto err = fs::write_all(path, span<const u08>(bytes, text.size())); !err) {
+				return err.error();
 			}
-			file << out.c_str();
-			return file ? error::no_error : error(generic_errc::input_error, lf::format("failed to write '{}'", path.string()));
+			return {};
 		}
 
 		report<ModSettings> read_mod_settings(string_view mod_name) {
@@ -77,7 +79,11 @@ namespace lf {
 			}
 
 			try {
-				YAML::Node root = YAML::LoadFile(path.string());
+				report<vector<u08>> bytes = fs::read_all(path);
+				if (!bytes) {
+					return unexpected(bytes.error());
+				}
+				YAML::Node root = YAML::Load(string(reinterpret_cast<const char*>(bytes->data()), bytes->size()));
 				if (YAML::Node values = root["settings"]) {
 					for (const auto& entry : values) {
 						settings.values[entry.first.as<string>()] = ObjectFromYaml(entry.second);
@@ -89,7 +95,7 @@ namespace lf {
 					}
 				}
 			} catch (const YAML::Exception& e) {
-				return unexpected(error(generic_errc::parse_error, lf::format("loading '{}': {}", path.string(), e.what())));
+				return unexpected(error(generic_errc::parse_error, lf::format("loading '{}': {}", path.text(), e.what())));
 			}
 			return settings;
 		}
@@ -108,10 +114,8 @@ namespace lf {
 	  public:
 		explicit DataScriptRunner(sol::state& lua) : lua(lua) {}
 
-		void run_file(string logical_path, fs::path absolute_path, fs::path relative_root) {
-			absolute_path = absolute_path.lexically_normal();
-			relative_root = relative_root.lexically_normal();
-			report<string> source = expanded_source(std::move(logical_path), absolute_path, relative_root);
+		void run_file(const fs::path& path) {
+			report<string> source = expanded_source(path);
 			if (!source) {
 				throw runtime_exception(source.error().message);
 			}
@@ -157,62 +161,38 @@ namespace lf {
 			return true;
 		}
 
-		static report<string> expanded_source(string logical_path, fs::path absolute_path, fs::path relative_root) {
-			report<string> source = fs::Read(absolute_path.string(), tags::String);
-			if (!source) {
-				return unexpected(source.error());
+		static report<string> expanded_source(const fs::path& path) {
+			report<vector<u08>> bytes = fs::read_all(path);
+			if (!bytes) {
+				return unexpected(bytes.error());
 			}
+			string source(reinterpret_cast<const char*>(bytes->data()), bytes->size());
 
 			string expanded;
 			size_t line_begin = 0;
-			while (line_begin <= source->size()) {
-				size_t line_end = source->find('\n', line_begin);
+			while (line_begin <= source.size()) {
+				size_t line_end = source.find('\n', line_begin);
 				if (line_end == string::npos) {
-					line_end = source->size();
+					line_end = source.size();
 				}
-				string_view line = string_view(*source).substr(line_begin, line_end - line_begin);
+				string_view line = string_view(source).substr(line_begin, line_end - line_begin);
 				string include_path;
 				if (include_line(line, include_path)) {
-					report<fs::path> absolute_include = ResolveVirtualPathReport(include_path, absolute_path.parent_path());
-					if (!absolute_include) {
-						return unexpected(absolute_include.error());
-					}
-
-					fs::path target_root = relative_root;
-					fs::path logical_root;
-					for (const fs::path& part : fs::path(logical_path)) {
-						logical_root = part;
-						break;
-					}
-					if (IsVirtualPath(include_path)) {
-						size_t end = include_path.find("__", 2);
-						if (end == string::npos || end == 2) {
-							return unexpected(error(generic_errc::parse_error, lf::format("invalid virtual path '{}'", include_path)));
+					fs::path include_file;
+					if (include_path.starts_with('/')) {
+						report<fs::path> parsed = fs::path::parse(include_path);
+						if (!parsed) {
+							return unexpected(parsed.error());
 						}
-						string mod_name(include_path.substr(2, end - 2));
-						report<fs::path> virtual_root = ResolveVirtualPathReport(string("<") + mod_name + ">/");
-						if (!virtual_root) {
-							return unexpected(virtual_root.error());
+						include_file = *parsed;
+					} else {
+						report<fs::path> parsed = fs::path::parse(include_path);
+						if (!parsed) {
+							return unexpected(parsed.error());
 						}
-						target_root = *virtual_root;
-						logical_root = mod_name;
+						include_file = path.parent().append(*parsed);
 					}
-
-					fs::path normalized_include = absolute_include->lexically_normal();
-					fs::path normalized_root = target_root.lexically_normal();
-					fs::path relative_include = normalized_include.lexically_relative(normalized_root);
-					bool escapes_root = relative_include.empty();
-					for (const fs::path& part : relative_include) {
-						if (part == "..") {
-							escapes_root = true;
-							break;
-						}
-					}
-					if (escapes_root) {
-						return unexpected(error(generic_errc::parse_error, lf::format("include '{}' escapes its mod root", include_path)));
-					}
-
-					report<string> included = expanded_source((logical_root / relative_include).generic_string(), normalized_include, normalized_root);
+					report<string> included = expanded_source(include_file);
 					if (!included) {
 						return unexpected(included.error());
 					}
@@ -222,11 +202,11 @@ namespace lf {
 					}
 				} else {
 					expanded += line;
-					if (line_end < source->size()) {
+					if (line_end < source.size()) {
 						expanded += '\n';
 					}
 				}
-				if (line_end == source->size()) {
+				if (line_end == source.size()) {
 					break;
 				}
 				line_begin = line_end + 1;
@@ -295,17 +275,27 @@ namespace lf {
 		case type::lua_nil: return object();
 		case type::boolean: return object(v.as<bool>());
 		case type::number: {
-			double d = v.as<double>();
-			double id;
-			if (std::modf(d, &id) == 0.0) {
-				if (id >= static_cast<double>(std::numeric_limits<i64>::min()) &&
-					id <= static_cast<double>(std::numeric_limits<i64>::max())) {
-					return object(static_cast<i64>(id));
-				} else if (id >= 0 && id <= static_cast<double>(std::numeric_limits<u64>::max())) {
-					return object(static_cast<u64>(id));
+			if (sol::utility::is_integer(v)) {
+				const lua_Integer integer{ v.as<lua_Integer>() };
+				if constexpr (std::is_signed_v<lua_Integer>) {
+					if constexpr (std::numeric_limits<lua_Integer>::digits > std::numeric_limits<i64>::digits) {
+						if (integer < static_cast<lua_Integer>(std::numeric_limits<i64>::min()) ||
+							integer > static_cast<lua_Integer>(std::numeric_limits<i64>::max())) {
+							throw runtime_exception(lf::format("lua integer '{}' is out of range for object", integer));
+						}
+					}
+					return object(static_cast<i64>(integer));
+				} else {
+					if constexpr (std::numeric_limits<lua_Integer>::digits <= std::numeric_limits<i64>::digits) {
+						return object(static_cast<i64>(integer));
+					} else if (integer <= static_cast<lua_Integer>(std::numeric_limits<i64>::max())) {
+						return object(static_cast<i64>(integer));
+					} else {
+						return object(static_cast<u64>(integer));
+					}
 				}
 			}
-			return object(d);
+			return object(v.as<double>());
 		}
 		case type::string: return object(v.as<string>());
 		case type::table: {
@@ -326,32 +316,44 @@ namespace lf {
 				}
 			}
 			if (seen_number_keys) {
-				i64 max_index = 0;
 				struct Entry {
-					i64 idx;
+					usize index;
 					object val;
 				};
 				std::vector<Entry> entries;
 				entries.reserve(t.size());
 				for (const auto& kv : t) {
-					double d = kv.first.as<double>();
-					double id;
-					if (std::modf(d, &id) != 0.0) {
-						throw runtime_exception(lf::format("non-integer numeric key '{}' in list", d));
+					usize index{};
+					if (sol::utility::is_integer(kv.first)) {
+						const lua_Integer integer{ kv.first.as<lua_Integer>() };
+						if constexpr (std::is_signed_v<lua_Integer>) {
+							if (integer < 1) {
+								throw runtime_exception(lf::format("list index '{}' must be >= 1", integer));
+							}
+						}
+						if constexpr (std::numeric_limits<lua_Integer>::digits > std::numeric_limits<usize>::digits) {
+							if (integer > static_cast<lua_Integer>(std::numeric_limits<usize>::max())) {
+								throw runtime_exception(lf::format("list index '{}' is out of range", integer));
+							}
+						}
+						index = static_cast<usize>(integer);
+					} else {
+						const double number{ kv.first.as<double>() };
+						if (!std::isfinite(number) || std::trunc(number) != number || number < 1 ||
+							number >= static_cast<double>(std::numeric_limits<usize>::max())) {
+							throw runtime_exception(lf::format("list index '{}' must be a finite positive integer in range", number));
+						}
+						index = static_cast<usize>(number);
 					}
-					i64 idx = static_cast<i64>(id);
-					if (idx < 1) {
-						throw runtime_exception(lf::format("list index '{}' must be >= 1", idx));
-					}
-					if (idx > max_index) {
-						max_index = idx;
-					}
-					entries.push_back({ idx, sol_to_object(kv.second) });
+					entries.emplace_back(Entry{ index, sol_to_object(kv.second) });
 				}
 				lf::list lst;
-				lst.resize(static_cast<size_t>(max_index));
+				lst.resize(entries.size());
 				for (const auto& e : entries) {
-					lst[static_cast<size_t>(e.idx - 1)] = e.val;
+					if (e.index > lst.size()) {
+						throw runtime_exception("sparse lua lists are not supported");
+					}
+					lst[e.index - 1] = e.val;
 				}
 				return object(lst);
 			}
@@ -426,11 +428,6 @@ namespace lf {
 		}
 		return result;
 	}
-	f32 mod_stage_progress(u32 completed_stages) {
-		constexpr f32 stage_count = 6.0f;
-		return static_cast<f32>(completed_stages) / stage_count;
-	}
-
 	void set_lua_value(sol::table table, string_view name, const object& value) {
 		string key(name);
 		if (value.is<bool>()) {
@@ -493,10 +490,10 @@ settings["startup"] = {}
 	}
 
 	error load_prototype_script(sol::state& lua, const ModInfo& mod, string_view file_name, bool required = false) {
-		fs::path path = mod.location / string(file_name);
+		auto path = mod.location.append(file_name);
 		if (!fs::exists(path)) {
 			if (required) {
-				log::Error("{}", lf::format("[mod-loader] missing required script: {}/{} ({})", mod.name, file_name, path.string()));
+				log::Error("{}", lf::format("[mod-loader] missing required script: {}/{} ({})", mod.name, file_name, path.text()));
 				return error(generic_errc::input_error, "Missing required prototype script " + mod.name + "/" + string(file_name));
 			}
 			log::Debug("{}", lf::format("[mod-loader] script skipped: {}/{} (missing optional)", mod.name, file_name));
@@ -506,8 +503,8 @@ settings["startup"] = {}
 		try {
 			DataScriptRunner runner(lua);
 			lua["__leaf_current_mod"] = mod.name;
-			log::Debug("{}", lf::format("[mod-loader] script begin: {}/{} ({})", mod.name, file_name, path.string()));
-			runner.run_file(mod.name + "/" + string(file_name), path, mod.location);
+			log::Debug("{}", lf::format("[mod-loader] script begin: {}/{} ({})", mod.name, file_name, path.text()));
+			runner.run_file(path);
 			log::Info("{}", lf::format("[mod-loader] script: \"{}\"/{}", mod.name, file_name));
 			return error::no_error;
 		} catch (const lf::exception& e) {
@@ -690,7 +687,7 @@ end
 								"' (version " + version_to_string(mods[it->second].mod_version) +
 								") matching forbidden constraint '" + operator_to_string(dep.op) +
 								" " + version_to_string(dep.required_version) + "'.";
-							errors.push_back(msg);
+							errors.emplace_back(msg);
 						}
 					}
 					continue;
@@ -705,16 +702,16 @@ end
 										 version_to_string(dep.required_version) + "' but '" +
 										 dep.name + "' is '" +
 										 version_to_string(mods[it->second].mod_version) + "'.";
-							errors.push_back(msg);
+							errors.emplace_back(msg);
 						}
 						// Reverse edge: dependency -> mod
-						graph[it->second].push_back(i);
+						graph[it->second].emplace_back(i);
 						log::Debug("{}", lf::format("[mod-loader] dependency edge: {} -> {}", dep.name, mods[i].name));
 					} else if (dep.type == ModDependency::Type::Required) {
 						// Required dependency missing
 						string msg = "Mod '" + mods[i].name + "' requires mod '" + dep.name +
 									 "' but it is missing.";
-						errors.push_back(msg);
+						errors.emplace_back(msg);
 					}
 				}
 			}
@@ -742,18 +739,18 @@ end
 				if (!visited[v]) {
 					if (dfs(v)) {
 						if (cycle.empty() || cycle.front() != v) {
-							cycle.push_back(v);
+							cycle.emplace_back(v);
 						}
 						return true;
 					}
 				} else if (on_stack[v]) {
 					// Cycle detected
-					cycle.push_back(v);
+					cycle.emplace_back(v);
 					return true;
 				}
 			}
 			on_stack[u] = false;
-			order.push_back(u);
+			order.emplace_back(u);
 			return false;
 		};
 		for (size_t i = 0; i < mods.size(); ++i) {
@@ -775,7 +772,7 @@ end
 		vector<ModInfo> sorted;
 		sorted.reserve(mods.size());
 		for (size_t idx : order) {
-			sorted.push_back(std::move(mods[idx]));
+			sorted.emplace_back(std::move(mods[idx]));
 		}
 		mods = std::move(sorted);
 		log::Debug("{}", "[mod-loader] dependency resolution complete");
@@ -804,12 +801,14 @@ end
 				vector<string_view> names;
 				names.reserve(type_table.size());
 				for (const auto& [name, data] : type_table) {
-					names.push_back(name);
+					names.emplace_back(name);
 				}
 				std::sort(names.begin(), names.end());
 				for (string_view name : names) {
 					try {
 						fn.create(name);
+					} catch (const lf::error& e) {
+						return error(e).add_context(lf::format("registering prototype '{}' (type:{})", name, fn.type()));
 					} catch (const lf::exception& e) {
 						return error(generic_errc::parse_error, e.what()).add_context(lf::format("registering prototype '{}' (type:{})", name, fn.type()));
 					}
@@ -824,7 +823,7 @@ end
 				vector<string_view> names;
 				names.reserve(type_table.size());
 				for (const auto& [name, data] : type_table) {
-					names.push_back(name);
+					names.emplace_back(name);
 				}
 				std::sort(names.begin(), names.end());
 				for (string_view name : names) {
@@ -834,6 +833,8 @@ end
 					}
 					try {
 						fn.init(name, data.get<dict>());
+					} catch (const lf::error& e) {
+						return error(e).add_context(lf::format("creating prototype '{}' (type:{})", name, fn.type()));
 					} catch (const lf::exception& e) {
 						return error(generic_errc::parse_error, e.what()).add_context(lf::format("creating prototype '{}' (type:{})", name, fn.type()));
 					}
@@ -843,93 +844,76 @@ end
 		return error::no_error;
 	}
 
-	error LoadOptions(const sol::state& lua) {
+	error LoadOptions(const sol::state& lua, string_view mod_name) {
 		sol::object option_obj = lua["option"];
 		if (!option_obj.is<sol::table>()) {
-			return error(generic_errc::missing_field, "missing required global 'option'");
+			return error(generic_errc::missing_field, lf::format("missing required global 'option' in mod '{}'", mod_name));
 		}
 
-		detail::loaded_options = sol_to_object(option_obj);
-
-		sol::table option = option_obj.as<sol::table>();
-		sol::object scene_obj = option["scene"];
-		if (!scene_obj.is<sol::table>()) {
-			return error(generic_errc::missing_field, "missing required option.scene table");
-		}
-		sol::table scene = scene_obj.as<sol::table>();
-		sol::object main_obj = scene["main"];
-		if (!main_obj.is<sol::table>()) {
-			return error(generic_errc::missing_field, "missing required option.scene.main table");
-		}
-		sol::table main = main_obj.as<sol::table>();
-		sol::object path_obj = main["path"];
-		if (!path_obj.is<string>()) {
-			return error(generic_errc::type_mismatch, "option.scene.main.path must be a string");
-		}
-		const string main_scene_path = path_obj.as<string>();
-		if (main_scene_path.empty()) {
-			return error(generic_errc::input_error, "option.scene.main.path cannot be empty");
-		}
+		Options[mod_name] = sol_to_object(option_obj);
 		return error::no_error;
 	}
 
-	error LoadMods(ModCollection& mod_tree, Progress& progress) {
+	error mod::Load(span<const Source> sources, Progress progress) {
 #define CANCELLED_ERROR error(generic_errc::unknown, "startup cancelled")
-#define PROGRESS_OF(step, steps) ((steps) == 0 ? 1.0f : static_cast<f32>(step) / static_cast<f32>(steps))
+
 
 		log::Info("{}", "[mod-loader] loading mods");
-		UnloadMods();
+		Unload();
+		scope_exit rollback{ [] { Unload(); } };
+		Options = dict{};
 		log::Debug("{}", lf::format("[mod-loader] reset runtime state: prototype_types={}", PrototypeTypeRegistry::functions.size()));
 
-		progress.set("stage", "collecting-sorting-mods", mod_stage_progress(0));
-		progress.set("process", "scanning-mod-directories", PROGRESS_OF(0, 3));
+		progress.add("collecting-sorting-mods");
+		progress.add("loading-settings");
+		progress.add("loading-localization");
+		progress.add("loading-mod-prototypes");
+
+		progress.add("finalizing-startup");
+		Progress phase = progress();
+		phase.add_total(3);
 		if (progress.cancelled()) {
 			return CANCELLED_ERROR;
 		}
 
 		vector<ModInfo> mods;
-		auto add_mods_from_dir = [&](const fs::path& dir, bool privileged) {
+		for (const Source& source : sources) {
 			if (progress.cancelled()) {
-				return false;
+				return CANCELLED_ERROR;
 			}
-			log::Debug("{}", lf::format("[mod-loader] scan root: kind={} path={}", privileged ? "privileged" : "unprivileged", dir.string()));
-			if (!fs::exists(dir)) {
-				fs::create_directories(dir);
-				log::Debug("{}", lf::format("[mod-loader] created missing mod directory: {}", dir.string()));
+			auto entries{ fs::list(source.path) };
+			if (!entries) {
+				return entries.error().add_context(lf::format("discovering mods in '{}'", source.path.text()));
 			}
-			vector<fs::path> mod_dirs;
-			for (const auto& entry : fs::directory_iterator(dir)) {
-				if (entry.is_directory()) {
-					auto info_path = entry.path() / "info.yaml";
-					if (fs::exists(info_path)) {
-						mod_dirs.push_back(entry.path());
-					} else {
-						log::Debug("{}", lf::format("[mod-loader] ignored non-mod directory: {}", entry.path().string()));
-					}
+			for (const fs::directory_entry& entry : *entries) {
+				if (entry.status().type() != fs::node_type::directory) {
+					continue;
 				}
-			}
-			std::sort(mod_dirs.begin(), mod_dirs.end(), [](const fs::path& a, const fs::path& b) {
-				return a.filename().generic_string() < b.filename().generic_string();
-			});
-			log::Debug("{}", lf::format("[mod-loader] candidates in root: count={} path={}", mod_dirs.size(), dir.string()));
-			for (const fs::path& mod_dir : mod_dirs) {
 				if (progress.cancelled()) {
-					return false;
+					return CANCELLED_ERROR;
 				}
-				ModInfo info = parse_mod_info((mod_dir / "info.yaml").string(), privileged);
-				log::Debug("{}", lf::format("[mod-loader] discovered {} v{} title='{}' path={} privileged={} deps=[{}]", info.name, version_to_string(info.mod_version), info.title, info.location.string(), info.privileged ? "true" : "false", dependencies_to_string(info.dependencies)));
+				const auto mod_dir{ source.path.append(entry.name()) };
+				auto directory{ fs::open_volume(mod_dir) };
+				if (!directory) { return directory.error(); }
+				if (source.privileged && directory->access() != fs::access_mode::read_only) {
+					return error{ generic_errc::input_error, lf::format("privileged mod source '{}' must be read-only", mod_dir.text()) };
+				}
+				const auto info_path{ mod_dir.append("info.yaml") };
+				const auto info_status{ fs::status(info_path) };
+				if (!info_status) {
+					if (info_status.error().code == lf::make_error_code(fs::error_code::not_found)) {
+						continue;
+					}
+					return info_status.error();
+				}
+				auto parsed{ parse_mod_info(info_path.text(), source.privileged) };
+				if (!parsed) { return parsed.error().add_context(lf::format("reading '{}'", info_path.text())); }
+				ModInfo info{ std::move(*parsed) };
+				if (find_mod(mods, info.name)) {
+					return error{ generic_errc::input_error, lf::format("duplicate mod '{}'", info.name) };
+				}
+				log::Debug("[mod-loader] discovered {} v{} at {}", info.name, version_to_string(info.mod_version), info.location.text());
 				mods.emplace_back(std::move(info));
-			}
-			return true;
-		};
-		for (const auto& dir : mod_tree.privileged_dirs) {
-			if (!add_mods_from_dir(dir, true)) {
-				return CANCELLED_ERROR;
-			}
-		}
-		for (const auto& dir : mod_tree.unprivileged_dirs) {
-			if (!add_mods_from_dir(dir, false)) {
-				return CANCELLED_ERROR;
 			}
 		}
 		if (progress.cancelled()) {
@@ -937,30 +921,45 @@ end
 		}
 		log::Info("{}", lf::format("[mod-loader] discovered {} mod(s): {}", mods.size(), mod_names_to_string(mods)));
 
-		progress.set("stage", "collecting-sorting-mods", mod_stage_progress(0));
-		progress.set("process", "reading-enabled-mods", PROGRESS_OF(1, 3));
+		phase.advance();
 		if (progress.cancelled()) {
 			return CANCELLED_ERROR;
 		}
-		fs::path enabled_mods_path = fs::folder::appdata / "enabled_mods.yaml";
-		sync_enabled_mods(enabled_mods_path, mods);
+		fs::path enabled_mods_path("/enabled_mods.yaml");
+		if (const auto error{ sync_enabled_mods(enabled_mods_path, mods) }) { return error; }
 		auto enabled_mods = load_enabled_mods(enabled_mods_path);
-		log::Debug("{}", lf::format("[mod-loader] enabled mods file={} entries={}", enabled_mods_path.string(), enabled_mods.size()));
+		log::Debug("{}", lf::format("[mod-loader] enabled mods file={} entries={}", enabled_mods_path.text(), enabled_mods.size()));
+		if (const auto status{ fs::status(enabled_mods_path) }; !status) { return status.error(); }
+		if (const auto created{ fs::create_directories("/settings") }; !created) { return created.error(); }
+		for (ModInfo& mod : mods) {
+			auto directory{ fs::open_volume(mod.location) };
+			if (!directory) { return directory.error(); }
+			const auto destination{ fs::path("/").append(mod.name) };
+			const auto status{ fs::status(destination) };
+			if (status) {
+				return error{ generic_errc::input_error, lf::format("mod namespace '{}' is already in use", destination.text()) };
+			}
+			if (status.error().code != lf::make_error_code(fs::error_code::not_found) &&
+				status.error().code != lf::make_error_code(fs::error_code::not_mapped)) { return status.error(); }
+			auto mounted{ fs::mount(destination, *directory) };
+			if (!mounted) { return mounted.error(); }
+			detail::mod_mappings.emplace_back(std::move(*mounted));
+			mod.location = destination;
+		}
 
 		vector<ModInfo> enabled_mod_list;
 		for (const auto& mod : mods) {
 			auto it = enabled_mods.find(mod.name);
 			if (it != enabled_mods.end() && it->second.enabled) {
 				log::Debug("{}", lf::format("[mod-loader] selected: {} v{} enabled=true", mod.name, version_to_string(mod.mod_version)));
-				enabled_mod_list.push_back(mod);
+				enabled_mod_list.emplace_back(mod);
 			} else {
 				log::Debug("{}", lf::format("[mod-loader] selected: {} v{} enabled=false", mod.name, version_to_string(mod.mod_version)));
 			}
 		}
 		log::Info("{}", lf::format("[mod-loader] enabled {} mod(s): {}", enabled_mod_list.size(), mod_names_to_string(enabled_mod_list)));
 
-		progress.set("stage", "collecting-sorting-mods", mod_stage_progress(0));
-		progress.set("process", "resolving-dependencies", PROGRESS_OF(2, 3));
+		phase.advance();
 		if (progress.cancelled()) {
 			return CANCELLED_ERROR;
 		}
@@ -968,8 +967,7 @@ end
 		if (sort_result) {
 			return sort_result;
 		}
-		progress.set("stage", "collecting-sorting-mods", mod_stage_progress(1));
-		progress.set("process", "load-order-ready", PROGRESS_OF(1, 1));
+		phase.advance();
 
 		log::Info("{}", "[mod-loader] load order:");
 		for (size_t i = 0; i < enabled_mod_list.size(); ++i) {
@@ -977,7 +975,6 @@ end
 				return CANCELLED_ERROR;
 			}
 			const auto& mod = enabled_mod_list[i];
-			RegisterVirtualRoot(mod.name, mod.location);
 			log::Info("{}", lf::format("[mod-loader]   {}. \"{}\" v{}", i + 1, mod.name, version_to_string(mod.mod_version)));
 		}
 
@@ -991,8 +988,9 @@ end
 		string selected_language = language_result->as<string>();
 		log::Info("{}", lf::format("[mod-loader] language: {}", selected_language));
 
-		progress.set("stage", "loading-settings", mod_stage_progress(1));
-		progress.set("process", "syncing-mod-settings", PROGRESS_OF(0, 1));
+		phase = progress();
+		phase.add_total(2);
+		phase.advance();
 		if (progress.cancelled()) {
 			return CANCELLED_ERROR;
 		}
@@ -1000,12 +998,11 @@ end
 		if (error settings_err = sync_loaded_mod_settings(span<const ModInfo>(enabled_mod_list.data(), enabled_mod_list.size()))) {
 			return settings_err.add_context("syncing mod settings");
 		}
-		progress.set("stage", "loading-settings", mod_stage_progress(2));
-		progress.set("process", "mod-settings-ready", PROGRESS_OF(1, 1));
+		phase.advance();
 		log::Info("{}", lf::format("[mod-loader] settings: {} startup setting(s)", detail::loaded_startup_settings.size()));
 
-		progress.set("stage", "loading-localization", mod_stage_progress(0));
-		progress.set("process", selected_language, PROGRESS_OF(0, 1));
+		phase = progress();
+		phase.add_total(1);
 		if (progress.cancelled()) {
 			return CANCELLED_ERROR;
 		}
@@ -1014,9 +1011,12 @@ end
 		if (locale_error) {
 			return locale_error.add_context("loading locale files");
 		}
+		phase.advance();
 
 		sol::state lua;
 		initialize_prototype_lua(lua);
+		phase = progress();
+		phase.add_total(static_cast<u64>(enabled_mod_list.size() + 1));
 
 		log::Info("{}", "[mod-loader] loading data scripts");
 		for (size_t i = 0; i < enabled_mod_list.size(); ++i) {
@@ -1024,29 +1024,23 @@ end
 				return CANCELLED_ERROR;
 			}
 			const auto& mod = enabled_mod_list[i];
-			f32 progress_base = enabled_mod_list.empty() ? 1.0f : static_cast<f32>(i) / static_cast<f32>(enabled_mod_list.size());
-			progress.set("stage", "loading-mod-prototypes", mod_stage_progress(2));
-			progress.set("process", mod.name + "/data.lua", PROGRESS_OF(2, 5) + progress_base * (PROGRESS_OF(4, 5) - PROGRESS_OF(2, 5)));
+			lua["option"] = lua.create_table();
+			lua["option"]["scene"] = lua.create_table();
 			log::Debug("{}", lf::format("[mod-loader] data.lua {}/{}: {}", i + 1, enabled_mod_list.size(), mod.name));
 			if (error err = load_prototype_script(lua, mod, "data.lua")) {
 				return err;
 			}
+			if (error err = LoadOptions(lua, mod.name)) {
+				return err.add_context(lf::format("loading options from {}/data.lua", mod.name));
+			}
+			phase.advance();
 		}
 
-		progress.set("stage", "loading-mod-prototypes", mod_stage_progress(2));
-		progress.set("process", "loading-data-lua-files", PROGRESS_OF(4, 5));
-		progress.set("process", "loading-options", PROGRESS_OF(4, 5));
 		if (progress.cancelled()) {
 			return CANCELLED_ERROR;
 		}
-		log::Debug("{}", "[mod-loader] loading global mod options");
-		auto option_err = LoadOptions(lua);
-		if (option_err) {
-			return option_err.add_context("loading options from mods' data.lua");
-		}
+		log::Debug("{}", "[mod-loader] loaded mod options");
 		detail::loaded_mods = enabled_mod_list;
-		progress.set("stage", "loading-mod-prototypes", mod_stage_progress(2));
-		progress.set("process", "creating-prototypes", PROGRESS_OF(4, 5));
 		if (progress.cancelled()) {
 			return CANCELLED_ERROR;
 		}
@@ -1055,59 +1049,18 @@ end
 		if (err) {
 			return err.add_context("loading prototypes from mods' data.lua");
 		}
-		progress.set("stage", "loading-mod-prototypes", mod_stage_progress(3));
-		progress.set("process", "prototypes-ready", PROGRESS_OF(1, 1));
+		phase.advance();
 		log::Debug("{}", lf::format("[mod-loader] prototypes: {}", prototype_counts_to_string()));
 
-		progress.set("stage", "loading-assets", mod_stage_progress(4));
-		progress.set("process", "building-texture-atlas", PROGRESS_OF(0, 1));
-		auto atlas_progress_scope = progress.scope("loading-assets", 6);
-		atlas_progress_scope.major("loading-assets", 4);
-		bool atlas_completed = false;
-		if (progress.cancelled()) {
-			return CANCELLED_ERROR;
-		}
-		if (rt::graphics_available()) {
-			string atlas_process = "building-texture-atlas";
-			auto atlas_progress = [&progress, &atlas_process, &atlas_progress_scope](size_t completed, size_t total) {
-				const f32 value = total == 0 ? 1.0f : static_cast<f32>(completed) / static_cast<f32>(total);
-				atlas_progress_scope.minor(atlas_process, value);
-			};
-			auto atlas_phase = [&progress, &atlas_process, &atlas_progress_scope](string_view phase) {
-				atlas_process = string(phase);
-				atlas_progress_scope.minor(phase, 0.0f);
-				if (phase == "loading-texture-atlas") {
-					atlas_progress_scope.major("loading-assets", 5);
-				}
-			};
-			rt::unique<rt::queue> atlas_queue(rt::Queue::Create(rt::QueueCapability::Graphics));
-			if (error err = TexturePrototype::BuildAtlas(atlas_queue, atlas_progress, atlas_phase)) {
-				return err.add_context("building texture atlas");
-			}
-			atlas_progress_scope.major("loading-assets", 6);
-			atlas_completed = true;
-		} else {
-			log::Debug("{}", "[mod-loader] graphics backend not loaded, skipping texture atlas build");
-		}
-		if (!atlas_completed) {
-			progress.set("stage", "loading-assets", mod_stage_progress(5));
-		}
-		progress.set("process", "assets-ready", PROGRESS_OF(1, 1));
-
-		progress.set("stage", "linking-prototypes", mod_stage_progress(4));
-		progress.set("process", "prototype-references-linked", PROGRESS_OF(1, 1));
-		progress.set("stage", "finalizing-startup", mod_stage_progress(5));
-		progress.set("process", "finalizing-startup", PROGRESS_OF(0, 1));
-#undef PROGRESS_OF
+		phase = progress();
+		phase.add_total(1);
+		phase.advance();
 #undef CANCELLED_ERROR
+		rollback.release();
 		return error::no_error;
 	}
 
-	const object& LoadedModOptions() {
-		return detail::loaded_options;
-	}
-
-	const vector<ModInfo>& LoadedMods() {
+	const vector<ModInfo>& mod::Loaded() {
 		return detail::loaded_mods;
 	}
 
@@ -1153,16 +1106,17 @@ end
 		return error::no_error;
 	}
 
-	void UnloadMods() {
-		TexturePrototype::ClearAtlas();
+	void mod::Unload() {
 		for (const auto& func : PrototypeTypeRegistry::functions) {
 			func.clear();
 		}
-		ClearVirtualFileSpace();
 		ClearLocalization();
-		detail::loaded_options = {};
+		Options = {};
+		detail::mod_mappings.clear();
 		detail::loaded_mods.clear();
 		detail::loaded_startup_settings.clear();
 		detail::loaded_settings.clear();
 	}
 } // namespace lf
+
+

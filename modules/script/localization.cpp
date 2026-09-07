@@ -58,15 +58,16 @@ namespace lf {
 	}
 
 	error load_locale_file(const fs::path& path, section_map& entries) {
-		auto file_text = fs::Read(path.string(), tags::String);
-		if (!file_text) {
-			return file_text.error();
+		report<vector<u08>> bytes = fs::read_all(path);
+		if (!bytes) {
+			return bytes.error();
 		}
+		string file_text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
 
 		string section;
 		string line;
 		size_t line_number = 0;
-		std::istringstream file(*file_text);
+		std::istringstream file(file_text);
 		while (std::getline(file, line)) {
 			++line_number;
 			if (line_number == 1 && line.starts_with("\xEF\xBB\xBF")) {
@@ -79,33 +80,33 @@ namespace lf {
 
 			if (text.front() == '[') {
 				if (text.back() != ']') {
-					return error(generic_errc::parse_error, lf::format("{}:{} invalid locale section", path.string(), line_number));
+					return error(generic_errc::parse_error, lf::format("{}:{} invalid locale section", path.text(), line_number));
 				}
 				section = trim(string_view(text).substr(1, text.size() - 2));
 				if (section.empty()) {
-					return error(generic_errc::parse_error, lf::format("{}:{} empty locale section", path.string(), line_number));
+					return error(generic_errc::parse_error, lf::format("{}:{} empty locale section", path.text(), line_number));
 				}
 				continue;
 			}
 
 			size_t equals = text.find('=');
 			if (equals == string::npos) {
-				return error(generic_errc::parse_error, lf::format("{}:{} expected key=value", path.string(), line_number));
+				return error(generic_errc::parse_error, lf::format("{}:{} expected key=value", path.text(), line_number));
 			}
 			if (section.empty()) {
-				return error(generic_errc::parse_error, lf::format("{}:{} locale entry outside a section", path.string(), line_number));
+				return error(generic_errc::parse_error, lf::format("{}:{} locale entry outside a section", path.text(), line_number));
 			}
 
 			string key = trim(string_view(text).substr(0, equals));
 			string value = trim(string_view(text).substr(equals + 1));
 			if (key.empty()) {
-				return error(generic_errc::parse_error, lf::format("{}:{} empty locale key", path.string(), line_number));
+				return error(generic_errc::parse_error, lf::format("{}:{} empty locale key", path.text(), line_number));
 			}
 			entries[section][key] = value;
 		}
 
 		if (!file.eof() && file.fail()) {
-			return error(generic_errc::input_error, lf::format("failed to read '{}'", path.string()));
+			return error(generic_errc::input_error, lf::format("failed to read '{}'", path.text()));
 		}
 		return error::no_error;
 	}
@@ -134,12 +135,13 @@ namespace lf {
 				return language;
 			}
 		}
-		LanguageInfo language;
+		vector<LanguageInfo>& languages = available_languages();
+		languages.emplace_back();
+		LanguageInfo& language = languages.back();
 		language.id = string(id);
 		language.name = string(id);
 		language.native_name = string(id);
-		available_languages().push_back(std::move(language));
-		return available_languages().back();
+		return language;
 	}
 
 	void apply_language_metadata(string_view id, const section_map& entries) {
@@ -164,29 +166,29 @@ namespace lf {
 		ensure_language(DefaultLanguage);
 
 		for (const ModInfo& mod : mods) {
-			fs::path locale_dir = mod.location / "locale";
+			auto locale_dir = mod.location.append("locale");
 			if (!fs::exists(locale_dir)) {
 				continue;
 			}
-
-			std::error_code ec;
-			for (const fs::directory_entry& entry : fs::directory_iterator(locale_dir, ec)) {
-				if (ec) {
-					return error(generic_errc::input_error, lf::format("failed to read '{}': {}", locale_dir.string(), ec.message()));
-				}
-				if (!entry.is_regular_file() || entry.path().extension() != ".cfg") {
+			report<vector<fs::directory_entry>> entries = fs::list(locale_dir);
+			if (!entries) {
+				return entries.error();
+			}
+			for (const fs::directory_entry& entry : *entries) {
+				string filename(entry.name());
+				if (entry.status().type() != fs::node_type::file || !filename.ends_with(".cfg")) {
 					continue;
 				}
-
-				string id = entry.path().stem().string();
+				string id = filename.substr(0, filename.size() - 4);
 				if (id.empty()) {
 					continue;
 				}
 				ensure_language(id);
 
 				section_map metadata;
-				if (error err = load_locale_file(entry.path(), metadata)) {
-					log::Warning("{}", lf::format("[locale] ignoring metadata in '{}': {}", entry.path().string(), err.message));
+				auto locale_file = locale_dir.append(filename);
+				if (error err = load_locale_file(locale_file, metadata)) {
+					log::Warning("{}", lf::format("[locale] ignoring metadata in '{}': {}", locale_file.text(), err.message));
 					continue;
 				}
 				apply_language_metadata(id, metadata);
@@ -197,25 +199,26 @@ namespace lf {
 
 	error load_language_into(span<const ModInfo> mods, string_view language, section_map& entries) {
 		for (const ModInfo& mod : mods) {
-			fs::path locale_path = mod.location / "locale" / locale_path_for_language(language);
+			auto locale_path = mod.location.append("locale").append(locale_path_for_language(language));
 			if (!fs::exists(locale_path)) {
 				continue;
 			}
 			if (error err = load_locale_file(locale_path, entries)) {
-				return err.add_context(lf::format("loading locale '{}'", locale_path.string()));
+				return err.add_context(lf::format("loading locale '{}'", locale_path.text()));
 			}
-			log::Trace("{}", lf::format("[locale] loaded: {}/locale/{}", mod.name, locale_path.filename().string()));
+			log::Trace("{}", lf::format("[locale] loaded: {}/locale/{}", mod.name, locale_path.filename()));
 		}
 		return error::no_error;
 	}
 
 	error load_core_language_into(string_view language, section_map& entries) {
-		fs::path locale_path = fs::folder::install / "data" / "core" / "locale" / locale_path_for_language(language);
+		fs::path locale_path("/core/locale");
+		locale_path = locale_path.append(locale_path_for_language(language));
 		if (!fs::exists(locale_path)) {
 			return error::no_error;
 		}
 		if (error err = load_locale_file(locale_path, entries)) {
-			return err.add_context(lf::format("loading core locale '{}'", locale_path.string()));
+			return err.add_context(lf::format("loading core locale '{}'", locale_path.text()));
 		}
 		return error::no_error;
 	}

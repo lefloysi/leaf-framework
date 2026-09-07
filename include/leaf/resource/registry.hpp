@@ -1,4 +1,5 @@
 #pragma once
+#include <leaf/core/register.hpp>
 #include "leaf/core/dynamic_object.hpp"
 #include "leaf/core/exception.hpp"
 #include "leaf/core/format.hpp"
@@ -23,10 +24,10 @@ namespace lf {
 		string_view (*type)() = nullptr;
 		size_t (*count)() = nullptr;
 		PrototypeIdentity (*identity)(size_t) = nullptr;
-		void (*load_assets)() = nullptr;
+		error (*load_assets)() = nullptr;
 	};
 
-	struct PrototypeTypeRegistry {
+	struct PrototypeTypeRegistry : Singleton<PrototypeTypeRegistry> {
 		template<typename T>
 		static void RegisterType() {
 			using db = Database<T>;
@@ -44,11 +45,15 @@ namespace lf {
 		inline static vector<PrototypeTypeFunctions> functions = {};
 	};
 
-	inline void LoadAssetPrototypes() {
+	inline error LoadAssetPrototypes() {
 		for (const PrototypeTypeFunctions& functions : PrototypeTypeRegistry::functions) {
 			if (functions.load_assets) {
-				functions.load_assets();
+				if (error result{ functions.load_assets() }) {
+					return result;
+				}
 			}
 		}
+		return {};
 	}
 } // namespace lf
+

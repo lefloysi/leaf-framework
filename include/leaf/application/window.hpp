@@ -1,18 +1,18 @@
-#ifndef LEAF_GRAPHICS_WINDOW_HPP
-#define LEAF_GRAPHICS_WINDOW_HPP
+#ifndef LEAF_APPLICATION_WINDOW_HPP
+#define LEAF_APPLICATION_WINDOW_HPP
 
-#include <leaf/core/string.hpp>
-#include <leaf/graphics/resource.hpp>
 #include <leaf/core/math/dim.hpp>
 #include <leaf/core/math/pos.hpp>
+#include <leaf/core/string.hpp>
+#include <leaf/graphics/resource.hpp>
 #include <leaf/resource/prototypes/cursor.hpp>
 
 #include <array>
 #include <mutex>
 #include <vector>
 
-namespace rt {
-	struct PlatformCursor;
+namespace lf {
+	struct PlatformWindow;
 
 	enum input_key : u08 {
 		KEY_NULL = 0,
@@ -211,8 +211,8 @@ namespace rt {
 
 	enum input_event_type : u08 {
 		INPUT_EVENT_CONTROL,
-		INPUT_EVENT_POINTER_MOVE,
-		INPUT_EVENT_POINTER_ENTER,
+		INPUT_EVENT_CURSOR_MOVE,
+		INPUT_EVENT_CURSOR_ENTER,
 		INPUT_EVENT_SCROLL,
 		INPUT_EVENT_TEXT,
 		INPUT_EVENT_FOCUS,
@@ -238,10 +238,10 @@ namespace rt {
 		pos2<f32> position;
 		pos2<f32> delta;
 		u32 character = 0;
-		string text;
+		string path;
 	};
 
-} // namespace rt
+} // namespace lf
 
 namespace lf {
 	class Window {
@@ -259,60 +259,63 @@ namespace lf {
 		void set_fullscreen(bool enabled);
 		bool fullscreen() const;
 		void set_vsync(bool enabled);
-		void set_cursor(string_view name, rt::PlatformCursor* cursor);
+		bool set_cursor(CursorPrototype::ID id);
 		bool drawable() const;
 		bool should_close() const;
 		void set_should_close(bool should_close);
 		dim2<u32> size() const;
-		std::vector<rt::input_event> input_events();
-		rt::input_state input_state(rt::input_control control) const;
+		std::vector<input_event> input_events();
+		input_state control_state(input_control control) const;
 		void update_input();
-		bool mouse_down(rt::input_button button) const;
-		bool mouse_pressed(rt::input_button button) const;
-		bool mouse_released(rt::input_button button) const;
-		bool key_down(rt::input_key key) const;
-		bool key_pressed(rt::input_key key) const;
-		bool key_released(rt::input_key key) const;
+		bool mouse_down(input_button button) const;
+		bool mouse_pressed(input_button button) const;
+		bool mouse_released(input_button button) const;
+		bool key_down(input_key key) const;
+		bool key_pressed(input_key key) const;
+		bool key_released(input_key key) const;
 		rt::view<rt::framebuffer> current_framebuffer();
 		rt::view<const rt::framebuffer> current_framebuffer() const;
 		rt::view<rt::command_buffer> begin_frame();
+		void begin_rendering();
 		void end_frame();
 
-		void on_control(rt::input_control control, bool down, rt::input_modifiers modifiers);
+		void on_control(input_control control, bool down, input_modifiers modifiers);
 		void on_text(u32 character);
-		void on_pointer(pos2<f32> position);
-		void on_pointer_enter(bool entered);
+		void on_cursor(pos2<f32> position);
+		void on_cursor_enter(bool entered);
 		void on_scroll(pos2<f32> delta);
 		void on_focus(bool focused);
-		void on_drop(string path);
-		void on_resize(dim2<u32> window_size, dim2<u32> framebuffer_size);
+		void on_drop(string_view path);
 
 	  private:
-		static constexpr size_t control_count = rt::KEY_ENUM_MAX + rt::BUTTON_ENUM_MAX;
-		static size_t control_index(rt::input_control control);
+		static constexpr size_t control_count = KEY_ENUM_MAX + BUTTON_ENUM_MAX;
+		static size_t control_index(input_control control);
+		void discard_frame();
 
-		rt::PlatformWindow* platform = nullptr;
-		string current_cursor;
-		rt_swapchain swapchain = RT_NULL_HANDLE;
+		PlatformWindow* platform = nullptr;
+		rt::unique<rt::swapchain> swapchain;
 		rt::unique<rt::queue> queue;
 		rt::unique<rt::command_buffer> frame_command_buffer;
+
 		rt::view<rt::framebuffer> frame_buffer;
-		dim2<u32> window_size = { 1280, 720 };
-		dim2<u32> pending_resize{};
-		pos2<i32> windowed_position = { 100, 100 };
-		dim2<u32> windowed_size = { 1280, 720 };
-		std::array<rt::input_state, control_count> controls{};
-		std::array<bool, control_count> deferred_releases{};
-		std::vector<rt::input_event> events;
-		pos2<f32> pointer_position{};
-		bool pointer_inside = false;
-		bool is_fullscreen = false;
-		bool vsync = false;
-		rt::input_modifiers modifiers{};
+		rt::timepoint frame_rendered;
+		bool frame_submitted = false;
+
+		dim2<u32> extent = { 1280, 720 };
+		pos2<f32> position = { 100, 100 };
+		pos2<f32> cursor_position{};
+		CursorPrototype::ID current_cursor;
+
+		std::array<input_state, control_count> controls{};
+		std::vector<input_event> events;
+		bool cursor_inside = false;
+		bool fullscreen_enabled = false;
+		bool vsync_enabled = false;
+		input_modifiers modifiers{};
+
 		mutable std::mutex input_mutex;
 	};
 
-	bool SetCursorPrototype(Window& window, CursorPrototype::ID id);
 } // namespace lf
 
-#endif /* LEAF_GRAPHICS_WINDOW_HPP */
+#endif /* LEAF_APPLICATION_WINDOW_HPP */

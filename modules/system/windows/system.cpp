@@ -1,5 +1,6 @@
 #include "leaf/system/system.hpp"
 #include "leaf/system/socket.hpp"
+#include "leaf/core/logging.hpp"
 #include <Shlobj.h>
 #include <cstdio>
 #include <cstdlib>
@@ -9,8 +10,9 @@
 
 namespace lf {
 	struct SystemData {
-		char appdata_dir[MAX_PATH] = { 0 };
-		char install_dir[MAX_PATH] = { 0 };
+		fs::native_path appdata_dir;
+		fs::native_path install_dir;
+		fs::native_path current_dir;
 	};
 
 	struct ShutdownHandlerEntry {
@@ -58,26 +60,27 @@ namespace lf {
 
 	error init_system(span<string_view> args) {
 		install_crash_handler();
-		if (SUCCEEDED(SHGetFolderPathA(nullptr, CSIDL_APPDATA, nullptr, 0, system_data.appdata_dir))) {
-			system_data.appdata_dir[MAX_PATH - 1] = '\0';
+		log::Logger::instance().add_sink(make_unique<log::ConsoleSink>());
+		wchar_t appdata_dir[MAX_PATH]{};
+		if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, appdata_dir))) {
+			system_data.appdata_dir = appdata_dir;
 		} else {
-			system_data.appdata_dir[0] = '\0';
+			system_data.appdata_dir.clear();
 		}
 		if (const char* appdata_override = std::getenv("LEAF_APPDATA_DIR"); appdata_override && appdata_override[0]) {
 			OverwriteAppdataDir(appdata_override);
 		}
 
-		DWORD length = GetModuleFileNameA(nullptr, system_data.install_dir, MAX_PATH);
+		wchar_t executable_path[MAX_PATH]{};
+		DWORD length = GetModuleFileNameW(nullptr, executable_path, MAX_PATH);
 		if (length == 0 || length >= MAX_PATH) {
-			system_data.install_dir[0] = '\0';
+			system_data.install_dir.clear();
 			return error::unknown_error;
 		}
-		for (DWORD i = length; i > 0; --i) {
-			if (system_data.install_dir[i - 1] == '\\' || system_data.install_dir[i - 1] == '/') {
-				system_data.install_dir[i - 1] = '\0';
-				break;
-			}
-		}
+		system_data.install_dir = fs::native_path{ executable_path }.parent_path();
+		std::error_code current_error;
+		system_data.current_dir = std::filesystem::current_path(current_error);
+		if (current_error) { return error{ current_error, "reading current directory" }; }
 		return sys::init_udp_sockets();
 	}
 	void exit_system() {
@@ -112,17 +115,19 @@ namespace lf {
 		}
 	}
 
-	string_view GetAppdataDir() {
+	const fs::native_path& GetAppdataDir() {
 		return system_data.appdata_dir;
 	}
 
-	string_view GetInstallDir() {
+	const fs::native_path& GetInstallDir() {
 		return system_data.install_dir;
 	}
 
+	const fs::native_path& GetCurrentDir() {
+		return system_data.current_dir;
+	}
+
 	void OverwriteAppdataDir(string_view new_path) {
-		size_t len = (new_path.size() < MAX_PATH - 1) ? new_path.size() : (MAX_PATH - 1);
-		memcpy(system_data.appdata_dir, new_path.data(), len);
-		system_data.appdata_dir[len] = '\0';
+		system_data.appdata_dir = new_path;
 	}
 } // namespace lf

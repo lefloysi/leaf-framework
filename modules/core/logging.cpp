@@ -3,7 +3,6 @@
 #include <atomic>
 #include <condition_variable>
 #include <deque>
-#include <filesystem>
 #include <iomanip>
 #include <iostream>
 #include <mutex>
@@ -210,28 +209,6 @@ namespace lf::log {
 				: std::cout;
 
 		out << console_color(record.level) << line << "\x1b[0m\n";
-	}
-
-	FileSink::FileSink(string_view path) {
-		std::filesystem::path p{ std::string(path) };
-
-		if (p.has_parent_path()) {
-			std::filesystem::create_directories(p.parent_path());
-		}
-
-		file.open(p, std::ios::out | std::ios::app);
-	}
-
-	FileSink::~FileSink() {
-		flush();
-	}
-
-	void FileSink::write(const Record&, string_view line) {
-		file << line << '\n';
-	}
-
-	void FileSink::flush() {
-		file.flush();
 	}
 
 } // namespace lf::log

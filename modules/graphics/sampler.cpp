@@ -7,13 +7,13 @@ namespace rt::Sampler {
 		return { sampler };
 	}
 
-	void SetFilter(view<sampler> sampler, rt_filter mag_filter, rt_filter min_filter, rt_mip_filter mip_filter) {
-		rtSamplerSetFilter(sampler, mag_filter, min_filter, mip_filter);
+	void SetFilter(view<sampler> sampler, filter mag_filter, filter min_filter, mip_filter mip_filter) {
+		rtSamplerSetFilter(sampler, static_cast<rt_filter>(mag_filter), static_cast<rt_filter>(min_filter), static_cast<rt_mip_filter>(mip_filter));
 		detail::check_rutile_error("failed to set sampler filter");
 	}
 
-	void SetAddress(view<sampler> sampler, rt_address_mode address_u, rt_address_mode address_v, rt_address_mode address_w) {
-		rtSamplerSetAddress(sampler, address_u, address_v, address_w);
+	void SetAddress(view<sampler> sampler, address_mode address_u, address_mode address_v, address_mode address_w) {
+		rtSamplerSetAddress(sampler, static_cast<rt_address_mode>(address_u), static_cast<rt_address_mode>(address_v), static_cast<rt_address_mode>(address_w));
 		detail::check_rutile_error("failed to set sampler address mode");
 	}
 

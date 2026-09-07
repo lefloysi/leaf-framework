@@ -51,8 +51,8 @@ namespace rt::Cmd {
 		detail::check_rutile_error("failed to clear stencil");
 	}
 
-	void Clear(view<command_buffer> command_buffer, rt_clear_flag attachments) {
-		rtCmdClear(command_buffer, attachments);
+	void Clear(view<command_buffer> command_buffer, clear_flag attachments) {
+		rtCmdClear(command_buffer, static_cast<rt_clear_flag>(attachments));
 		detail::check_rutile_error("failed to clear attachments");
 	}
 
@@ -91,6 +91,11 @@ namespace rt::Cmd {
 		detail::check_rutile_error("failed to bind vertex buffer");
 	}
 
+	void IndexBuffer(view<command_buffer> command_buffer, view<buffer> buffer, rt_buffer_range range, index_format format) {
+		rtCmdIndexBuffer(command_buffer, buffer, range, static_cast<rt_index_format>(format));
+		detail::check_rutile_error("failed to bind index buffer");
+	}
+
 	void BindTexture(view<command_buffer> command_buffer, location location, view<texture_view> texture_view) {
 		rtCmdBindTexture(command_buffer, location, texture_view);
 		detail::check_rutile_error("failed to bind texture");
@@ -106,14 +111,34 @@ namespace rt::Cmd {
 		detail::check_rutile_error("failed to upload buffer data");
 	}
 
-	void TextureData(view<command_buffer> command_buffer, view<texture> texture, rt_texture_range range, const u08* data) {
-		rtCmdTextureData(command_buffer, texture, range, data);
+	void BufferBarrier(view<command_buffer> command_buffer, view<buffer> buffer, rt_buffer_range range, access src, access dst) {
+		rtCmdBufferBarrier(command_buffer, buffer, range, { static_cast<rt_stage_flag>(src.stage), static_cast<rt_access_type>(src.type) }, { static_cast<rt_stage_flag>(dst.stage), static_cast<rt_access_type>(dst.type) });
+		detail::check_rutile_error("failed to transition buffer");
+	}
+
+	void TextureData(view<command_buffer> command_buffer, view<texture> texture, texture_range range, const u08* data) {
+		rtCmdTextureData(command_buffer, texture, { static_cast<rt_texture_aspect_flag>(range.aspects), range.base_mip, range.mip_count, range.base_layer, range.layer_count, range.extent, range.offset }, data);
 		detail::check_rutile_error("failed to upload texture data");
+	}
+
+	void TextureBarrier(view<command_buffer> command_buffer, view<texture> texture, texture_range range, access src, access dst) {
+		rtCmdTextureBarrier(command_buffer, texture, { static_cast<rt_texture_aspect_flag>(range.aspects), range.base_mip, range.mip_count, range.base_layer, range.layer_count, range.extent, range.offset }, { static_cast<rt_stage_flag>(src.stage), static_cast<rt_access_type>(src.type) }, { static_cast<rt_stage_flag>(dst.stage), static_cast<rt_access_type>(dst.type) });
+		detail::check_rutile_error("failed to transition texture");
+	}
+
+	void Execute(view<command_buffer> commands, view<command_buffer> executed_commands) {
+		rtCmdExecute(commands, executed_commands);
+		detail::check_rutile_error("failed to execute command buffer");
 	}
 
 	void Draw(view<command_buffer> command_buffer, u32 vertex_count, u32 first_vertex) {
 		rtCmdDraw(command_buffer, vertex_count, first_vertex);
 		detail::check_rutile_error("failed to draw");
+	}
+
+	void DrawIndexed(view<command_buffer> command_buffer, u32 index_count, u32 first_index, i32 vertex_offset) {
+		rtCmdDrawIndexed(command_buffer, index_count, first_index, vertex_offset);
+		detail::check_rutile_error("failed to record indexed draw");
 	}
 
 	void EndRendering(view<command_buffer> command_buffer) {

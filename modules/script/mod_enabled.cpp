@@ -1,15 +1,17 @@
 #include "leaf/script/mod_enabled.hpp"
+#include "leaf/core/exception.hpp"
 #include <algorithm>
-#include <fstream>
 #include <yaml-cpp/yaml.h>
 
 namespace lf {
 	std::unordered_map<string, ModEnabledInfo> load_enabled_mods(const fs::path& yaml_path) {
 		std::unordered_map<string, ModEnabledInfo> result;
-		if (!fs::exists(yaml_path)) {
-			return result;
+		report<vector<u08>> bytes = fs::read_all(yaml_path);
+		if (!bytes) {
+			if (bytes.error().code == make_error_code(fs::error_code::not_found)) { return result; }
+			throw runtime_exception(bytes.error().message);
 		}
-		YAML::Node node = YAML::LoadFile(yaml_path.string());
+		YAML::Node node = YAML::Load(string(reinterpret_cast<const char*>(bytes->data()), bytes->size()));
 		if (!node["mods"]) {
 			return result;
 		}
@@ -22,14 +24,14 @@ namespace lf {
 		return result;
 	}
 
-	void save_enabled_mods(const fs::path& yaml_path, const std::unordered_map<string, ModEnabledInfo>& mods) {
+	error save_enabled_mods(const fs::path& yaml_path, const std::unordered_map<string, ModEnabledInfo>& mods) {
 		YAML::Emitter emitter;
 		emitter << YAML::BeginMap;
 		emitter << "mods" << YAML::BeginMap;
 		vector<string> names;
 		names.reserve(mods.size());
 		for (const auto& [name, info] : mods) {
-			names.push_back(name);
+			names.emplace_back(name);
 		}
 		std::sort(names.begin(), names.end());
 		for (const string& name : names) {
@@ -44,11 +46,18 @@ namespace lf {
 		}
 		emitter << YAML::EndMap;
 		emitter << YAML::EndMap;
-		std::ofstream fout(yaml_path);
-		fout << emitter.c_str();
+		const string output(emitter.c_str());
+		const auto* bytes = reinterpret_cast<const u08*>(output.data());
+		if (report<void> created = fs::create_directories(yaml_path.parent()); !created) {
+			return created.error();
+		}
+		if (report<void> result = fs::write_all(yaml_path, span<const u08>(bytes, output.size())); !result) {
+			return result.error();
+		}
+		return {};
 	}
 
-	void sync_enabled_mods(const fs::path& yaml_path, const vector<ModInfo>& discovered_mods) {
+	error sync_enabled_mods(const fs::path& yaml_path, const vector<ModInfo>& discovered_mods) {
 		auto enabled_mods = load_enabled_mods(yaml_path);
 		// Add new mods as disabled, update versions, remove missing mods
 		std::unordered_map<string, ModEnabledInfo> updated;
@@ -61,16 +70,16 @@ namespace lf {
 				updated[mod.name] = ModEnabledInfo{ mod.privileged, mod.mod_version };
 			}
 		}
-		save_enabled_mods(yaml_path, updated);
+		return save_enabled_mods(yaml_path, updated);
 	}
 
-	void set_mod_enabled(const fs::path& yaml_path, const string& mod_name, bool enabled) {
+	error set_mod_enabled(const fs::path& yaml_path, const string& mod_name, bool enabled) {
 		auto enabled_mods = load_enabled_mods(yaml_path);
 		auto it = enabled_mods.find(mod_name);
 		if (it != enabled_mods.end()) {
 			it->second.enabled = enabled;
-			enabled_mods[mod_name] = it->second;
-			save_enabled_mods(yaml_path, enabled_mods);
+			return save_enabled_mods(yaml_path, enabled_mods);
 		}
+		return { generic_errc::input_error, lf::format("unknown mod '{}'", mod_name) };
 	}
 } // namespace lf

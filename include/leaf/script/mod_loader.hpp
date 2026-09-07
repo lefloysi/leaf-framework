@@ -11,29 +11,35 @@
 namespace lf {
 	/*!
 	** @ingroup modding
-	** @brief Loads all mods in the supplied mod collection.
-	** @param mod_tree Privileged and unprivileged mod roots to scan.
-	** @param progress Shared progress state used by the loader.
+	** @brief Options produced by the most recent successful mod load, keyed by mod name.
+	*/
+	extern object Options;
+	object sol_to_object(const sol::object& value);
+}
+
+namespace lf::mod {
+	struct Source {
+		fs::path path;
+		bool privileged = false;
+	};
+
+	/*!
+	** @ingroup modding
+	** @brief Loads mods from directories in the virtual filesystem.
 	** @return An error if loading fails, or an empty error on success.
 	*/
-	error LoadMods(ModCollection& mod_tree, Progress& progress);
+	error Load(span<const Source> sources, Progress progress = Progress{});
 
 	/*!
 	** @ingroup modding
-	** @brief Gets the raw option table produced by the most recent successful mod load.
+	** @brief Gets the mods from the most recent successful mod load.
 	*/
-	const object& LoadedModOptions();
-
-	/*!
-	** @ingroup modding
-	** @brief Gets the raw option table produced by the most recent successful mod load.
-	*/
-	const vector<ModInfo>& LoadedMods();
-	object sol_to_object(const sol::object& value);
+	const vector<ModInfo>& Loaded();
 
 	/*!
 	** @ingroup modding
 	** @brief Clears loaded mods and registered prototypes.
 	*/
-	void UnloadMods();
-} // namespace lf
+	void Unload();
+} // namespace lf::mod
+

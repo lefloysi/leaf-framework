@@ -4,8 +4,6 @@
 #include "leaf/core/types.hpp"
 #include "leaf/resource/prototype.hpp"
 
-#include <leaf/audio/sound.hpp>
-
 namespace lf {
 	struct SoundGroupPrototype final : public Prototype<identifier<SoundGroupPrototype, u16, void>> {
 		static constexpr string_view type() noexcept { return "sound-group"; }
@@ -19,12 +17,10 @@ namespace lf {
 		static constexpr string_view type() noexcept { return "sound"; }
 
 		explicit SoundPrototype(const dict& data);
-		error load() override;
 
 		string path;
 		SoundGroupPrototype::ID group;
 		f32 volume = 1.0f;
-		Sound sound;
 	};
 
 	template<>

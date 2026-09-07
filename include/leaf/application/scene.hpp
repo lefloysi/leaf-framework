@@ -1,11 +1,10 @@
 #pragma once
 
 #include "leaf/core/error.hpp"
-#include "leaf/core/memory.hpp"
+#include "leaf/core/filesystem.hpp"
 #include "leaf/core/rate.hpp"
 #include "leaf/core/string.hpp"
 #include "leaf/core/time.hpp"
-#include "leaf/core/vector.hpp"
 #include "leaf/application/window.hpp"
 #include "leaf/script/state.hpp"
 
@@ -25,11 +24,15 @@ namespace lf {
 
 		void show();
 		bool update();
+		bool update(span<const input_event> events);
+		void render();
+		rt::view<rt::command_buffer> record(rt::view<rt::command_buffer> uploads);
 
 		void set_rml(string_view source);
 		Rml::ElementDocument& document();
 		sol::state& script_state();
-		error execute_document_scripts();
+		/*! @brief Executes one Lua source file from Leaf's virtual filesystem. */
+		error execute_script(fs::path_view path);
 
 		void set_render_rate(frequency rate);
 		frequency render_rate() const;
@@ -38,13 +41,8 @@ namespace lf {
 		const Window& window() const;
 
 	  private:
-		struct ScriptSource {
-			string name;
-			string text;
-		};
+		void input(span<const input_event> events);
 
-		void input();
-		void render();
 		void unload_document();
 		bool execute_script(string_view source, string_view source_name);
 		void ProcessEvent(Rml::Event& event) override;
@@ -53,7 +51,7 @@ namespace lf {
 		Rml::Context* context = nullptr;
 		Rml::ElementDocument* rml_document = nullptr;
 		sol::state lua = CreateState();
-		vector<ScriptSource> document_scripts;
 		RateMeter frame_rate;
 	};
 } // namespace lf
+

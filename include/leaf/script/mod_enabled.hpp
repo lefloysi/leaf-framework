@@ -14,9 +14,9 @@ namespace lf {
 	// Loads enabled mods from YAML file
 	std::unordered_map<string, ModEnabledInfo> load_enabled_mods(const fs::path& yaml_path);
 	// Saves enabled mods to YAML file
-	void save_enabled_mods(const fs::path& yaml_path, const std::unordered_map<string, ModEnabledInfo>& mods);
+	error save_enabled_mods(const fs::path& yaml_path, const std::unordered_map<string, ModEnabledInfo>& mods);
 	// Synchronizes enabled mods file with discovered mods
-	void sync_enabled_mods(const fs::path& yaml_path, const vector<ModInfo>& discovered_mods);
+	error sync_enabled_mods(const fs::path& yaml_path, const vector<ModInfo>& discovered_mods);
 	// Set mod enabled/disabled
-	void set_mod_enabled(const fs::path& yaml_path, const string& mod_name, bool enabled);
+	error set_mod_enabled(const fs::path& yaml_path, const string& mod_name, bool enabled);
 } // namespace lf

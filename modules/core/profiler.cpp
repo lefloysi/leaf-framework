@@ -70,13 +70,8 @@ namespace lf {
 
 	void LogProfileSnapshot(string_view label) {
 		vector<ProfileSnapshotEntry> snapshot = ProfileSnapshot();
-		static std::ofstream file(fs::folder::appdata / "leaf_profile.log", std::ios::app);
 		auto write_line = [&](string_view message) {
 			log::Debug("{}", message);
-			if (file) {
-				file << message << "\n";
-				file.flush();
-			}
 		};
 
 		write_line(lf::format("[{}] {} profile buckets", label, snapshot.size()));

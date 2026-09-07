@@ -1,6 +1,7 @@
 #pragma once
 
 #include "leaf/core/error.hpp"
+#include "leaf/core/filesystem.hpp"
 #include "leaf/core/span.hpp"
 #include "leaf/core/string.hpp"
 
@@ -17,6 +18,7 @@ namespace lf {
 	void RequestShutdown();
 	void ShowErrorBox(string_view title, string_view message);
 	void OverwriteAppdataDir(string_view new_path);
-	string_view GetAppdataDir();
-	string_view GetInstallDir();
+	const fs::native_path& GetAppdataDir();
+	const fs::native_path& GetInstallDir();
+	const fs::native_path& GetCurrentDir();
 } // namespace lf

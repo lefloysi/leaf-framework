@@ -19,11 +19,14 @@
 namespace lf {
 	enum class generic_errc : i32;
 	enum class graphics_errc : i32;
+	namespace fs { enum class error_code : i32; }
 } // namespace lf
 template<>
 struct std::is_error_code_enum<lf::generic_errc> : std::true_type {};
 template<>
 struct std::is_error_code_enum<lf::graphics_errc> : std::true_type {};
+template<>
+struct std::is_error_code_enum<lf::fs::error_code> : std::true_type {};
 
 namespace lf {
 	using std::errc;
@@ -61,17 +64,37 @@ namespace lf {
 	};
 
 	/*!
+	** @brief Errors reported by Leaf's virtual filesystem and package adapters.
+	*/
+	namespace fs {
+		enum class error_code : i32 {
+			invalid_path,
+			not_mapped,
+			not_found,
+			already_exists,
+			not_a_file,
+			not_a_directory,
+			directory_not_empty,
+			read_only,
+			permission_denied,
+			unsupported_operation,
+			out_of_range,
+			end_of_file,
+			file_too_large,
+			no_space,
+			mapping_conflict,
+			cross_volume_operation,
+			corrupt_data,
+			limit_exceeded,
+			io_error,
+		};
+	}
+
+	/*!
 	** @brief Error category backing generic_errc values.
 	*/
 	struct generic_error_category : public std::error_category {
-		/*!
-		** @brief Gets the stable category name.
-		*/
 		const ch08* name() const noexcept override;
-
-		/*!
-		** @brief Converts a generic_errc value to a diagnostic message.
-		*/
 		string message(i32 ev) const override;
 	};
 
@@ -80,16 +103,28 @@ namespace lf {
 		string message(i32 ev) const override;
 	};
 
+	struct filesystem_error_category : public std::error_category {
+		const ch08* name() const noexcept override;
+		string message(i32 ev) const override;
+	};
+
 	/*!
 	** @brief Gets Leaf's generic error category singleton.
 	*/
 	const error_category& generic_category();
+	error_code make_error_code(generic_errc e);
 
 	/*!
-	** @brief Creates an error_code for a Leaf generic error.
+	** @brief Gets Leaf's graphics error category singleton.
 	*/
-	error_code make_error_code(generic_errc e);
+	const error_category& graphics_category();
 	error_code make_error_code(graphics_errc e);
+
+	/*!
+	** @brief Gets Leaf's filesystem error category singleton.
+	*/
+	const error_category& filesystem_category();
+	error_code make_error_code(fs::error_code e);
 
 	/*!
 	** @brief Error value with both a machine-readable code and human text.

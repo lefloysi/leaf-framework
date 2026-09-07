@@ -15,88 +15,88 @@
 #include <array>
 #include <vector>
 
-static rt::PlatformWindow* from_glfw(GLFWwindow* wnd) { return reinterpret_cast<rt::PlatformWindow*>(wnd); }
-static GLFWwindow* to_glfw(rt::PlatformWindow* wnd) { return reinterpret_cast<GLFWwindow*>(wnd); }
+static lf::PlatformWindow* from_glfw(GLFWwindow* wnd) { return reinterpret_cast<lf::PlatformWindow*>(wnd); }
+static GLFWwindow* to_glfw(lf::PlatformWindow* wnd) { return reinterpret_cast<GLFWwindow*>(wnd); }
 static lf::Window* owner(GLFWwindow* wnd) { return static_cast<lf::Window*>(glfwGetWindowUserPointer(wnd)); }
 
-static rt::input_key input_key_from_glfw(int key) {
+static lf::input_key input_key_from_glfw(int key) {
 	if (key >= GLFW_KEY_A && key <= GLFW_KEY_Z) {
-		return static_cast<rt::input_key>(rt::KEY_A + key - GLFW_KEY_A);
+		return static_cast<lf::input_key>(lf::KEY_A + key - GLFW_KEY_A);
 	}
 	if (key >= GLFW_KEY_0 && key <= GLFW_KEY_9) {
-		return static_cast<rt::input_key>(rt::KEY_0 + key - GLFW_KEY_0);
+		return static_cast<lf::input_key>(lf::KEY_0 + key - GLFW_KEY_0);
 	}
 	if (key >= GLFW_KEY_KP_0 && key <= GLFW_KEY_KP_9) {
-		return static_cast<rt::input_key>(rt::KEY_NUMPAD_0 + key - GLFW_KEY_KP_0);
+		return static_cast<lf::input_key>(lf::KEY_NUMPAD_0 + key - GLFW_KEY_KP_0);
 	}
 	if (key >= GLFW_KEY_F1 && key <= GLFW_KEY_F24) {
-		return static_cast<rt::input_key>(rt::KEY_F1 + key - GLFW_KEY_F1);
+		return static_cast<lf::input_key>(lf::KEY_F1 + key - GLFW_KEY_F1);
 	}
 
 	switch (key) {
-	case GLFW_KEY_BACKSPACE: /******/ return rt::KEY_BACKSPACE;
-	case GLFW_KEY_TAB: /************/ return rt::KEY_TAB;
-	case GLFW_KEY_ENTER: /**********/ return rt::KEY_ENTER;
-	case GLFW_KEY_ESCAPE: /*********/ return rt::KEY_ESCAPE;
-	case GLFW_KEY_SPACE: /**********/ return rt::KEY_SPACE;
-	case GLFW_KEY_DELETE: /*********/ return rt::KEY_DELETE;
-	case GLFW_KEY_INSERT: /*********/ return rt::KEY_INSERT;
-	case GLFW_KEY_HOME: /***********/ return rt::KEY_HOME;
-	case GLFW_KEY_END: /************/ return rt::KEY_END;
-	case GLFW_KEY_PAGE_UP: /********/ return rt::KEY_PAGE_UP;
-	case GLFW_KEY_PAGE_DOWN: /******/ return rt::KEY_PAGE_DOWN;
-	case GLFW_KEY_LEFT: /***********/ return rt::KEY_LEFT_ARROW;
-	case GLFW_KEY_RIGHT: /**********/ return rt::KEY_RIGHT_ARROW;
-	case GLFW_KEY_UP: /*************/ return rt::KEY_UP_ARROW;
-	case GLFW_KEY_DOWN: /***********/ return rt::KEY_DOWN_ARROW;
-	case GLFW_KEY_LEFT_ALT: /*******/ return rt::KEY_ALT_LEFT;
-	case GLFW_KEY_RIGHT_ALT: /******/ return rt::KEY_ALT_RIGHT;
-	case GLFW_KEY_LEFT_CONTROL: /***/ return rt::KEY_CTRL_LEFT;
-	case GLFW_KEY_RIGHT_CONTROL: /**/ return rt::KEY_CTRL_RIGHT;
-	case GLFW_KEY_LEFT_SHIFT: /*****/ return rt::KEY_SHIFT_LEFT;
-	case GLFW_KEY_RIGHT_SHIFT: /****/ return rt::KEY_SHIFT_RIGHT;
-	case GLFW_KEY_LEFT_SUPER: /*****/ return rt::KEY_SUPER_LEFT;
-	case GLFW_KEY_RIGHT_SUPER: /****/ return rt::KEY_SUPER_RIGHT;
-	case GLFW_KEY_NUM_LOCK: /*******/ return rt::KEY_NUM_LOCK;
-	case GLFW_KEY_SCROLL_LOCK: /****/ return rt::KEY_SCROLL_LOCK;
-	case GLFW_KEY_CAPS_LOCK: /******/ return rt::KEY_CAPS_LOCK;
-	case GLFW_KEY_PAUSE: /**********/ return rt::KEY_PAUSE;
-	case GLFW_KEY_PRINT_SCREEN: /***/ return rt::KEY_PRINT;
-	case GLFW_KEY_KP_ADD: /*********/ return rt::KEY_NUMPAD_ADD;
-	case GLFW_KEY_KP_DECIMAL: /*****/ return rt::KEY_NUMPAD_DECIMAL;
-	case GLFW_KEY_KP_DIVIDE: /******/ return rt::KEY_NUMPAD_DIVIDE;
-	case GLFW_KEY_KP_ENTER: /*******/ return rt::KEY_NUMPAD_ENTER;
-	case GLFW_KEY_KP_MULTIPLY: /****/ return rt::KEY_NUMPAD_MULTIPLY;
-	case GLFW_KEY_KP_SUBTRACT: /****/ return rt::KEY_NUMPAD_SUBTRACT;
-	case GLFW_KEY_GRAVE_ACCENT: /***/ return rt::KEY_BACKQUOTE;
-	case GLFW_KEY_BACKSLASH: /******/ return rt::KEY_BACKSLASH;
-	case GLFW_KEY_LEFT_BRACKET: /***/ return rt::KEY_BRACKET_LEFT;
-	case GLFW_KEY_RIGHT_BRACKET: /**/ return rt::KEY_BRACKET_RIGHT;
-	case GLFW_KEY_COMMA: /**********/ return rt::KEY_COMMA;
-	case GLFW_KEY_EQUAL: /**********/ return rt::KEY_EQUAL;
-	case GLFW_KEY_MINUS: /**********/ return rt::KEY_MINUS;
-	case GLFW_KEY_PERIOD: /*********/ return rt::KEY_PERIOD;
-	case GLFW_KEY_APOSTROPHE: /*****/ return rt::KEY_QUOTE;
-	case GLFW_KEY_SEMICOLON: /******/ return rt::KEY_SEMICOLON;
-	case GLFW_KEY_SLASH: /**********/ return rt::KEY_SLASH;
-	case GLFW_KEY_MENU: /***********/ return rt::KEY_CONTEXT_MENU;
-	default: return rt::KEY_NULL;
+	case GLFW_KEY_BACKSPACE: /******/ return lf::KEY_BACKSPACE;
+	case GLFW_KEY_TAB: /************/ return lf::KEY_TAB;
+	case GLFW_KEY_ENTER: /**********/ return lf::KEY_ENTER;
+	case GLFW_KEY_ESCAPE: /*********/ return lf::KEY_ESCAPE;
+	case GLFW_KEY_SPACE: /**********/ return lf::KEY_SPACE;
+	case GLFW_KEY_DELETE: /*********/ return lf::KEY_DELETE;
+	case GLFW_KEY_INSERT: /*********/ return lf::KEY_INSERT;
+	case GLFW_KEY_HOME: /***********/ return lf::KEY_HOME;
+	case GLFW_KEY_END: /************/ return lf::KEY_END;
+	case GLFW_KEY_PAGE_UP: /********/ return lf::KEY_PAGE_UP;
+	case GLFW_KEY_PAGE_DOWN: /******/ return lf::KEY_PAGE_DOWN;
+	case GLFW_KEY_LEFT: /***********/ return lf::KEY_LEFT_ARROW;
+	case GLFW_KEY_RIGHT: /**********/ return lf::KEY_RIGHT_ARROW;
+	case GLFW_KEY_UP: /*************/ return lf::KEY_UP_ARROW;
+	case GLFW_KEY_DOWN: /***********/ return lf::KEY_DOWN_ARROW;
+	case GLFW_KEY_LEFT_ALT: /*******/ return lf::KEY_ALT_LEFT;
+	case GLFW_KEY_RIGHT_ALT: /******/ return lf::KEY_ALT_RIGHT;
+	case GLFW_KEY_LEFT_CONTROL: /***/ return lf::KEY_CTRL_LEFT;
+	case GLFW_KEY_RIGHT_CONTROL: /**/ return lf::KEY_CTRL_RIGHT;
+	case GLFW_KEY_LEFT_SHIFT: /*****/ return lf::KEY_SHIFT_LEFT;
+	case GLFW_KEY_RIGHT_SHIFT: /****/ return lf::KEY_SHIFT_RIGHT;
+	case GLFW_KEY_LEFT_SUPER: /*****/ return lf::KEY_SUPER_LEFT;
+	case GLFW_KEY_RIGHT_SUPER: /****/ return lf::KEY_SUPER_RIGHT;
+	case GLFW_KEY_NUM_LOCK: /*******/ return lf::KEY_NUM_LOCK;
+	case GLFW_KEY_SCROLL_LOCK: /****/ return lf::KEY_SCROLL_LOCK;
+	case GLFW_KEY_CAPS_LOCK: /******/ return lf::KEY_CAPS_LOCK;
+	case GLFW_KEY_PAUSE: /**********/ return lf::KEY_PAUSE;
+	case GLFW_KEY_PRINT_SCREEN: /***/ return lf::KEY_PRINT;
+	case GLFW_KEY_KP_ADD: /*********/ return lf::KEY_NUMPAD_ADD;
+	case GLFW_KEY_KP_DECIMAL: /*****/ return lf::KEY_NUMPAD_DECIMAL;
+	case GLFW_KEY_KP_DIVIDE: /******/ return lf::KEY_NUMPAD_DIVIDE;
+	case GLFW_KEY_KP_ENTER: /*******/ return lf::KEY_NUMPAD_ENTER;
+	case GLFW_KEY_KP_MULTIPLY: /****/ return lf::KEY_NUMPAD_MULTIPLY;
+	case GLFW_KEY_KP_SUBTRACT: /****/ return lf::KEY_NUMPAD_SUBTRACT;
+	case GLFW_KEY_GRAVE_ACCENT: /***/ return lf::KEY_BACKQUOTE;
+	case GLFW_KEY_BACKSLASH: /******/ return lf::KEY_BACKSLASH;
+	case GLFW_KEY_LEFT_BRACKET: /***/ return lf::KEY_BRACKET_LEFT;
+	case GLFW_KEY_RIGHT_BRACKET: /**/ return lf::KEY_BRACKET_RIGHT;
+	case GLFW_KEY_COMMA: /**********/ return lf::KEY_COMMA;
+	case GLFW_KEY_EQUAL: /**********/ return lf::KEY_EQUAL;
+	case GLFW_KEY_MINUS: /**********/ return lf::KEY_MINUS;
+	case GLFW_KEY_PERIOD: /*********/ return lf::KEY_PERIOD;
+	case GLFW_KEY_APOSTROPHE: /*****/ return lf::KEY_QUOTE;
+	case GLFW_KEY_SEMICOLON: /******/ return lf::KEY_SEMICOLON;
+	case GLFW_KEY_SLASH: /**********/ return lf::KEY_SLASH;
+	case GLFW_KEY_MENU: /***********/ return lf::KEY_CONTEXT_MENU;
+	default: return lf::KEY_NULL;
 	}
 }
 
-static rt::input_modifiers input_modifiers_from_glfw(int mods) {
-	rt::input_modifiers modifiers;
+static lf::input_modifiers input_modifiers_from_glfw(int mods) {
+	lf::input_modifiers modifiers;
 	if (mods & GLFW_MOD_CONTROL) {
-		modifiers.add(rt::INPUT_MODIFIER_CTRL);
+		modifiers.add(lf::INPUT_MODIFIER_CTRL);
 	}
 	if (mods & GLFW_MOD_SHIFT) {
-		modifiers.add(rt::INPUT_MODIFIER_SHIFT);
+		modifiers.add(lf::INPUT_MODIFIER_SHIFT);
 	}
 	if (mods & GLFW_MOD_ALT) {
-		modifiers.add(rt::INPUT_MODIFIER_ALT);
+		modifiers.add(lf::INPUT_MODIFIER_ALT);
 	}
 	if (mods & GLFW_MOD_SUPER) {
-		modifiers.add(rt::INPUT_MODIFIER_SUPER);
+		modifiers.add(lf::INPUT_MODIFIER_SUPER);
 	}
 	return modifiers;
 }
@@ -107,14 +107,14 @@ static void mouse_button_callback(GLFWwindow* wnd, int button, int action, int m
 		if (!window) {
 			return;
 		}
-		rt::input_button input_button = static_cast<rt::input_button>(button + 1);
+		lf::input_button input_button = static_cast<lf::input_button>(button + 1);
 		bool down = action == GLFW_PRESS;
 		double x = 0.0;
 		double y = 0.0;
 		glfwGetCursorPos(wnd, &x, &y);
-		window->on_pointer({ static_cast<f32>(x), static_cast<f32>(y) });
+		window->on_cursor({ static_cast<f32>(x), static_cast<f32>(y) });
 		window->on_control(
-			{ rt::INPUT_CONTROL_BUTTON, static_cast<u16>(input_button) },
+			{ lf::INPUT_CONTROL_BUTTON, static_cast<u16>(input_button) },
 			down,
 			input_modifiers_from_glfw(mods)
 		);
@@ -123,15 +123,15 @@ static void mouse_button_callback(GLFWwindow* wnd, int button, int action, int m
 
 static void key_callback(GLFWwindow* wnd, int key, int, int action, int mods) {
 	if (action == GLFW_PRESS || action == GLFW_RELEASE || action == GLFW_REPEAT) {
-		rt::input_key input_key = input_key_from_glfw(key);
-		if (input_key != rt::KEY_NULL) {
+		lf::input_key input_key = input_key_from_glfw(key);
+		if (input_key != lf::KEY_NULL) {
 			lf::Window* window = owner(wnd);
 			if (!window) {
 				return;
 			}
 			bool down = action != GLFW_RELEASE;
-			rt::input_modifiers modifiers = input_modifiers_from_glfw(mods);
-			window->on_control({ rt::INPUT_CONTROL_KEY, static_cast<u16>(input_key) }, down, modifiers);
+			lf::input_modifiers modifiers = input_modifiers_from_glfw(mods);
+			window->on_control({ lf::INPUT_CONTROL_KEY, static_cast<u16>(input_key) }, down, modifiers);
 		}
 	}
 }
@@ -149,7 +149,7 @@ static void cursor_position_callback(GLFWwindow* wnd, double x, double y) {
 	if (!window) {
 		return;
 	}
-	window->on_pointer({
+	window->on_cursor({
 		static_cast<f32>(x),
 		static_cast<f32>(y),
 	});
@@ -157,7 +157,7 @@ static void cursor_position_callback(GLFWwindow* wnd, double x, double y) {
 
 static void cursor_enter_callback(GLFWwindow* wnd, int entered) {
 	if (lf::Window* window = owner(wnd)) {
-		window->on_pointer_enter(entered == GLFW_TRUE);
+		window->on_cursor_enter(entered == GLFW_TRUE);
 	}
 }
 
@@ -186,33 +186,7 @@ static void drop_callback(GLFWwindow* wnd, int count, const char** paths) {
 	}
 }
 
-static void framebuffer_size_callback(GLFWwindow* wnd, int width, int height) {
-	if (width == 0 || height == 0) {
-		return;
-	}
-	int window_width = 0;
-	int window_height = 0;
-	glfwGetWindowSize(wnd, &window_width, &window_height);
-	if (window_width == 0 || window_height == 0) {
-		return;
-	}
-	lf::Window* window = owner(wnd);
-	if (!window) {
-		return;
-	}
-	window->on_resize(
-		{
-			static_cast<u32>(window_width),
-			static_cast<u32>(window_height),
-		},
-		{
-			static_cast<u32>(width),
-			static_cast<u32>(height),
-		}
-	);
-}
-
-namespace rt {
+namespace lf {
 	error init_platform(span<string_view> args) {
 		log::Info("[leaf] Starting platform...");
 		if (!glfwInit()) {
@@ -252,17 +226,16 @@ namespace rt {
 		glfwSetScrollCallback(to_glfw(wnd), nullptr);
 		glfwSetWindowFocusCallback(to_glfw(wnd), nullptr);
 		glfwSetDropCallback(to_glfw(wnd), nullptr);
-		glfwSetFramebufferSizeCallback(to_glfw(wnd), nullptr);
 		glfwSetWindowUserPointer(to_glfw(wnd), nullptr);
 		glfwDestroyWindow(to_glfw(wnd));
 	}
 
-	void bind_platform_window_swapchain(PlatformWindow* wnd, rt_swapchain swapchain) {
+	void bind_platform_window_swapchain(PlatformWindow* wnd, rt::view<rt::swapchain> swapchain) {
 		rtSwapchainBindGLFW(swapchain, to_glfw(wnd));
-		detail::check_rutile_error("failed to bind GLFW wnd to swapchain");
+		rt::detail::check_rutile_error("failed to bind GLFW wnd to swapchain");
 	}
 
-	void platform_window_owner(PlatformWindow* wnd, lf::Window* owner) {
+	void platform_window_owner(PlatformWindow* wnd, Window* owner) {
 		if (!wnd) {
 			return;
 		}
@@ -275,7 +248,6 @@ namespace rt {
 		glfwSetScrollCallback(to_glfw(wnd), scroll_callback);
 		glfwSetWindowFocusCallback(to_glfw(wnd), focus_callback);
 		glfwSetDropCallback(to_glfw(wnd), drop_callback);
-		glfwSetFramebufferSizeCallback(to_glfw(wnd), framebuffer_size_callback);
 	}
 
 	void platform_window_clear_owner(PlatformWindow* wnd) {
@@ -408,4 +380,4 @@ namespace rt {
 		const char* text = glfwGetClipboardString(nullptr);
 		return text ? string(text) : string();
 	}
-} // namespace rt
+} // namespace lf

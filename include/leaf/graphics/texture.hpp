@@ -5,7 +5,7 @@
 namespace rt::Texture {
 	handle<texture> Create();
 	void Destroy(handle<texture> texture);
-	void Resize(view<texture> texture, rt_texture_type type, rt_format format, rt_extent_3d extent, u64 mip_count = 1);
+	void Resize(view<texture> texture, texture_type type, format format, rt_extent_3d extent, u64 mip_count = 1);
 } // namespace rt::Texture
 
 #endif /* LEAF_GRAPHICS_TEXTURE_HPP */

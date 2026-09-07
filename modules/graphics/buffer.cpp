@@ -11,8 +11,8 @@ namespace rt {
 		rtBufferDestroy(buffer);
 	}
 
-	void Buffer::Resize(view<buffer> buffer, rt_memory_type memory_type, u64 size) {
-		rtBufferResize(buffer, memory_type, size);
+	void Buffer::Resize(view<buffer> buffer, memory_type memory_type, u64 size) {
+		rtBufferResize(buffer, static_cast<rt_memory_type>(memory_type), size);
 		detail::check_rutile_error("failed to resize buffer");
 	}
 

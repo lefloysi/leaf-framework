@@ -11,7 +11,6 @@
 #include <chrono>
 #include <condition_variable>
 #include <deque>
-#include <fstream>
 #include <mutex>
 #include <source_location>
 #include <thread>
@@ -55,16 +54,6 @@ namespace lf::log {
 
 	struct ConsoleSink : Sink {
 		void write(const Record&, string_view line) override;
-	};
-
-	struct FileSink : Sink {
-		explicit FileSink(string_view path);
-		~FileSink() override;
-		void write(const Record&, string_view line) override;
-		void flush() override;
-
-	  private:
-		std::ofstream file;
 	};
 
 	struct Logger {

@@ -48,6 +48,9 @@ namespace lf {
 				stopping = true;
 			}
 			condition.notify_all();
+			for (auto& worker : workers) {
+				worker.join();
+			}
 		}
 
 		template<typename Function>
@@ -74,3 +77,4 @@ namespace lf {
 		bool stopping = false;
 	};
 } // namespace lf
+

@@ -11,7 +11,7 @@
 #include <leaf/core/math/dim.hpp>
 #include <leaf/core/math/pos.hpp>
 
-#include <rutile.h>
+#include <leaf/graphics/enums.hpp>
 
 #include <type_traits>
 
@@ -73,6 +73,8 @@ namespace rt {
 	*/
 	struct queue;
 
+	struct swapchain;
+
 	struct sampler;
 
 	/*!
@@ -84,11 +86,6 @@ namespace rt {
 	** @brief Rutile synchronization timestamp.
 	*/
 	using timepoint = rt_timepoint;
-
-	/*!
-	** @brief Opaque platform window resource.
-	*/
-	struct window;
 
 	/*!
 	** @brief Maps a Leaf resource tag to its native handle and destroy routine.
@@ -223,10 +220,13 @@ namespace rt {
 	template<typename Resource>
 	class unique {
 	  public:
+		using native_handle = resource_traits<Resource>::native_handle;
+
 		/*!
 		** @brief Creates an empty owner.
 		*/
 		unique() = default;
+		explicit unique(native_handle value) : resource{ value } {}
 
 		/*!
 		** @brief Takes ownership of an existing handle.
@@ -328,6 +328,7 @@ namespace rt {
 	LEAF_RESOURCE_TRAITS(program, rt_program, rtProgramDestroy);
 	LEAF_RESOURCE_TRAITS(command_buffer, rt_command_buffer, rtCommandBufferDestroy);
 	LEAF_RESOURCE_TRAITS(sampler, rt_sampler, rtSamplerDestroy);
+	LEAF_RESOURCE_TRAITS(swapchain, rt_swapchain, rtSwapchainDestroy);
 
 #undef LEAF_RESOURCE_TRAITS
 

@@ -10,22 +10,24 @@ namespace lf {
 		using vnum_t = vnum;
 		using gnum_t = gnum;
 
-		explicit identifier() = default;
-		explicit identifier(vnum_t idx, gnum_t gen) : idx_value(idx), gen_value(gen) {}
-		explicit operator bool() const {
+		static const identifier null;
+
+		constexpr explicit identifier() = default;
+		constexpr explicit identifier(vnum_t idx, gnum_t gen) : idx_value(idx), gen_value(gen) {}
+		constexpr explicit operator bool() const {
 			return idx_value;
 		}
 
-		vnum get() const {
+		constexpr vnum get() const {
 			return idx_value;
 		}
-		gnum gen() const {
+		constexpr gnum gen() const {
 			return gen_value;
 		}
-		friend bool operator==(const identifier& lhs, const identifier& rhs) {
+		friend constexpr bool operator==(const identifier& lhs, const identifier& rhs) {
 			return lhs.idx_value == rhs.idx_value && lhs.gen_value == rhs.gen_value;
 		}
-		friend bool operator!=(const identifier& lhs, const identifier& rhs) {
+		friend constexpr bool operator!=(const identifier& lhs, const identifier& rhs) {
 			return !(lhs == rhs);
 		}
 
@@ -41,24 +43,31 @@ namespace lf {
 		using vnum_t = vnum;
 		using gnum_t = void;
 
-		explicit identifier() = default;
-		explicit identifier(vnum idx) : idx_value(idx) {}
+		static const identifier null;
 
-		vnum get() const {
+		constexpr explicit identifier() = default;
+		constexpr explicit identifier(vnum idx) : idx_value(idx) {}
+
+		constexpr vnum get() const {
 			return idx_value;
 		}
 
-		explicit operator bool() const {
+		constexpr explicit operator bool() const {
 			return idx_value;
 		}
-		friend bool operator==(const identifier& lhs, const identifier& rhs) {
+		friend constexpr bool operator==(const identifier& lhs, const identifier& rhs) {
 			return lhs.idx_value == rhs.idx_value;
 		}
-		friend bool operator!=(const identifier& lhs, const identifier& rhs) {
+		friend constexpr bool operator!=(const identifier& lhs, const identifier& rhs) {
 			return !(lhs == rhs);
 		}
 
 	  private:
 		vnum idx_value = 0;
 	};
+	template<typename T, typename vnum, typename gnum>
+	inline constexpr identifier<T, vnum, gnum> identifier<T, vnum, gnum>::null{};
+
+	template<typename T, typename vnum>
+	inline constexpr identifier<T, vnum, void> identifier<T, vnum, void>::null{};
 } // namespace lf

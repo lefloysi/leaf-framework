@@ -13,7 +13,7 @@ namespace rt {
 			return;
 		}
 		rtClearError();
-		lf::log::Error("{}", err.message);
+		lf::log::Error("error : {}", err.message);
 		throw runtime_exception(lf::format("{} : {}", context, err.message));
 	}
 

@@ -2,12 +2,13 @@
 
 #include <leaf/core/distance.hpp>
 #include <leaf/core/identifier.hpp>
+#include <leaf/core/math/rect.hpp>
 #include <leaf/core/schema.hpp>
 #include <leaf/core/vector.hpp>
-#include <leaf/graphics/format.hpp>
+#include <leaf/graphics/graphics_program.hpp>
+#include <leaf/graphics/resource.hpp>
 #include <leaf/resource/database.hpp>
 #include <leaf/resource/prototype.hpp>
-#include <leaf/core/math/rect.hpp>
 
 #include <sol/sol.hpp>
 
@@ -59,7 +60,7 @@ namespace lf::prototype_lua {
 	}
 
 	void write_value(sol::state_view lua, sol::table destination, string_view name, const rect<u32>& value);
-	void write_value(sol::state_view, sol::table destination, string_view name, rt::Format value);
+	void write_value(sol::state_view, sol::table destination, string_view name, rt::format value);
 
 	template<typename Value>
 	void write_value(sol::state_view lua, sol::table destination, string_view name, const std::optional<Value>& value) {
@@ -101,7 +102,7 @@ namespace lf::prototype_lua {
 		);
 	}
 
-	inline void write_value(sol::state_view, sol::table destination, string_view name, rt::Format value) {
+	inline void write_value(sol::state_view, sol::table destination, string_view name, rt::format value) {
 		destination[string(name)] = static_cast<u32>(value);
 	}
 
@@ -116,6 +117,22 @@ namespace lf::prototype_lua {
 } // namespace lf::prototype_lua
 
 namespace lf {
+	template<>
+	struct object_trait<rt::format> {
+		static rt::format parse(const object& value);
+	};
+
+	template<>
+	struct schema_trait<rt::vertex_attribute> {
+		static auto get(auto& value) {
+			return group(
+				field("name", value.name),
+				field("offset", value.offset),
+				field("format", value.format)
+			);
+		}
+	};
+
 	// This exporter accepts only Leaf prototype objects that provide an explicit
 	// schema. Callers choose concrete types; it performs no global discovery.
 	template<typename Prototype>

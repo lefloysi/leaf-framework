@@ -9,6 +9,11 @@ namespace lf {
 		return instant::from_quantum(nanoseconds);
 	}
 
+	timepoint wall_now() {
+		const std::chrono::system_clock::duration elapsed = std::chrono::system_clock::now().time_since_epoch();
+		return timepoint::from_unix_epoch(duration::from_chrono(elapsed));
+	}
+
 	string pretty_string_trait<duration>::to_string(const duration& value) {
 		i64 rem = value.quantum_count();
 		string result;
