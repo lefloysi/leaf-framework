@@ -2,23 +2,79 @@
 #include "application/rml/backend.hpp"
 
 #include <leaf/core/exception.hpp>
-#include <leaf/core/filesystem.hpp>
 #include <leaf/core/format.hpp>
 #include <leaf/core/logging.hpp>
 #include <leaf/core/register.hpp>
 #include <leaf/core/scope.hpp>
 #include <leaf/graphics/command_buffer.hpp>
 #include <leaf/platform/platform.hpp>
+#include <leaf/script/settings.hpp>
+#include <algorithm>
 
 #include <RmlUi/Core/Context.h>
 #include <RmlUi/Core/Element.h>
 #include <RmlUi/Core/ElementDocument.h>
 #include <RmlUi/Core/Elements/ElementFormControl.h>
 #include <RmlUi/Core/Event.h>
+#include <RmlUi/Core/Factory.h>
 #include <RmlUi/Core/Input.h>
 #include <RmlUi/Core/StringUtilities.h>
 
 namespace lf {
+	namespace {
+		string key_name(input_key key) {
+			if (key >= KEY_A && key <= KEY_Z) {
+				return string(1, static_cast<char>('a' + key - KEY_A));
+			}
+			if (key >= KEY_0 && key <= KEY_9) {
+				return string(1, static_cast<char>('0' + key - KEY_0));
+			}
+			if (key >= KEY_F1 && key <= KEY_F24) {
+				return lf::format("f{}", static_cast<int>(key - KEY_F1 + 1));
+			}
+
+			switch (key) {
+			case KEY_ESCAPE: return "escape";
+			case KEY_TAB: return "tab";
+			case KEY_ENTER: return "enter";
+			case KEY_SPACE: return "space";
+			case KEY_BACKSPACE: return "backspace";
+			case KEY_DELETE: return "delete";
+			case KEY_INSERT: return "insert";
+			case KEY_HOME: return "home";
+			case KEY_END: return "end";
+			case KEY_PAGE_UP: return "page-up";
+			case KEY_PAGE_DOWN: return "page-down";
+			case KEY_LEFT_ARROW: return "left";
+			case KEY_RIGHT_ARROW: return "right";
+			case KEY_UP_ARROW: return "up";
+			case KEY_DOWN_ARROW: return "down";
+			case KEY_ALT_LEFT: return "alt-left";
+			case KEY_ALT_RIGHT: return "alt-right";
+			case KEY_CTRL_LEFT: return "ctrl-left";
+			case KEY_CTRL_RIGHT: return "ctrl-right";
+			case KEY_SHIFT_LEFT: return "shift-left";
+			case KEY_SHIFT_RIGHT: return "shift-right";
+			case KEY_SUPER_LEFT: return "super-left";
+			case KEY_SUPER_RIGHT: return "super-right";
+			case KEY_BACKQUOTE: return "backquote";
+			case KEY_BACKSLASH: return "backslash";
+			case KEY_BRACKET_LEFT: return "bracket-left";
+			case KEY_BRACKET_RIGHT: return "bracket-right";
+			case KEY_COMMA: return "comma";
+			case KEY_EQUAL: return "equal";
+			case KEY_HASH: return "hash";
+			case KEY_MINUS: return "minus";
+			case KEY_PERIOD: return "period";
+			case KEY_QUOTE: return "quote";
+			case KEY_SEMICOLON: return "semicolon";
+			case KEY_SLASH: return "slash";
+			default: return {};
+			}
+		}
+
+	}
+
 	class SceneElement final {
 	  public:
 		SceneElement(Scene& scene, string_view id) : scene(&scene), id(id) {}
@@ -29,30 +85,6 @@ namespace lf {
 
 		void set_value(string_view value) {
 			form_control().SetValue(Rml::String{ value });
-		}
-
-		bool get_checked() const {
-			return element().HasAttribute("checked");
-		}
-
-		void set_checked(bool checked) {
-			if (checked) {
-				element().SetAttribute("checked", "checked");
-			} else {
-				element().RemoveAttribute("checked");
-			}
-		}
-
-		bool get_disabled() const {
-			return element().HasAttribute("disabled");
-		}
-
-		void set_disabled(bool disabled) {
-			if (disabled) {
-				element().SetAttribute("disabled", "disabled");
-			} else {
-				element().RemoveAttribute("disabled");
-			}
 		}
 
 		string get_inner_rml() const {
@@ -80,6 +112,10 @@ namespace lf {
 			return element().GetAttribute<Rml::String>(Rml::String{ name }, "");
 		}
 
+		bool has_attribute(string_view name) const {
+			return element().HasAttribute(Rml::String{ name });
+		}
+
 		void set_attribute(string_view name, string_view value) {
 			element().SetAttribute(Rml::String{ name }, Rml::String{ value });
 		}
@@ -91,13 +127,17 @@ namespace lf {
 	  private:
 		Rml::Element& element() const {
 			Rml::Element* result = scene->document().GetElementById(id);
-			if (!result) throw runtime_exception(lf::format("scene document has no element '{}'", id));
+			if (!result) {
+				throw runtime_exception(lf::format("scene document has no element '{}'", id));
+			}
 			return *result;
 		}
 
 		Rml::ElementFormControl& form_control() const {
 			Rml::ElementFormControl* result = rmlui_dynamic_cast<Rml::ElementFormControl*>(&element());
-			if (!result) throw runtime_exception(lf::format("scene element '{}' is not a form control", id));
+			if (!result) {
+				throw runtime_exception(lf::format("scene element '{}' is not a form control", id));
+			}
 			return *result;
 		}
 
@@ -105,22 +145,19 @@ namespace lf {
 		string id;
 	};
 
-	const bool scene_script_registration{ [] {
-		Register<Scene>::add([](Scene& scene) -> error {
+	class SceneScriptInstaller {
+		static error install(Scene& scene) {
 			sol::state& lua = scene.script_state();
 			lua.new_usertype<SceneElement>("leaf.scene_element",
 				"get_value", &SceneElement::get_value,
 				"set_value", &SceneElement::set_value,
-				"get_checked", &SceneElement::get_checked,
-				"set_checked", &SceneElement::set_checked,
-				"get_disabled", &SceneElement::get_disabled,
-				"set_disabled", &SceneElement::set_disabled,
 				"get_inner_rml", &SceneElement::get_inner_rml,
 				"set_inner_rml", &SceneElement::set_inner_rml,
 				"set_text", &SceneElement::set_text,
 				"get_property", &SceneElement::get_property,
 				"set_property", &SceneElement::set_property,
 				"get_attribute", &SceneElement::get_attribute,
+				"has_attribute", &SceneElement::has_attribute,
 				"set_attribute", &SceneElement::set_attribute,
 				"remove_attribute", &SceneElement::remove_attribute
 			);
@@ -137,14 +174,27 @@ namespace lf {
 				"window", window
 			);
 			return {};
-		});
-		return true;
-	}() };
+		}
+
+		SceneScriptInstaller() {
+			Register<Scene>::add(install);
+		}
+
+		static SceneScriptInstaller instance;
+	};
+
+	SceneScriptInstaller SceneScriptInstaller::instance{};
 
 	static Rml::Input::KeyIdentifier rml_key(input_key key) {
-		if (key >= KEY_A && key <= KEY_Z) return static_cast<Rml::Input::KeyIdentifier>(Rml::Input::KI_A + key - KEY_A);
-		if (key >= KEY_0 && key <= KEY_9) return static_cast<Rml::Input::KeyIdentifier>(Rml::Input::KI_0 + key - KEY_0);
-		if (key >= KEY_F1 && key <= KEY_F24) return static_cast<Rml::Input::KeyIdentifier>(Rml::Input::KI_F1 + key - KEY_F1);
+		if (key >= KEY_A && key <= KEY_Z) {
+			return static_cast<Rml::Input::KeyIdentifier>(Rml::Input::KI_A + key - KEY_A);
+		}
+		if (key >= KEY_0 && key <= KEY_9) {
+			return static_cast<Rml::Input::KeyIdentifier>(Rml::Input::KI_0 + key - KEY_0);
+		}
+		if (key >= KEY_F1 && key <= KEY_F24) {
+			return static_cast<Rml::Input::KeyIdentifier>(Rml::Input::KI_F1 + key - KEY_F1);
+		}
 		switch (key) {
 		case KEY_ESCAPE: return Rml::Input::KI_ESCAPE;
 		case KEY_ENTER: return Rml::Input::KI_RETURN;
@@ -166,10 +216,18 @@ namespace lf {
 
 	static int rml_modifiers(input_modifiers modifiers) {
 		int result = 0;
-		if (modifiers.has(INPUT_MODIFIER_CTRL)) result |= Rml::Input::KM_CTRL;
-		if (modifiers.has(INPUT_MODIFIER_SHIFT)) result |= Rml::Input::KM_SHIFT;
-		if (modifiers.has(INPUT_MODIFIER_ALT)) result |= Rml::Input::KM_ALT;
-		if (modifiers.has(INPUT_MODIFIER_SUPER)) result |= Rml::Input::KM_META;
+		if (modifiers.has(INPUT_MODIFIER_CTRL)) {
+			result |= Rml::Input::KM_CTRL;
+		}
+		if (modifiers.has(INPUT_MODIFIER_SHIFT)) {
+			result |= Rml::Input::KM_SHIFT;
+		}
+		if (modifiers.has(INPUT_MODIFIER_ALT)) {
+			result |= Rml::Input::KM_ALT;
+		}
+		if (modifiers.has(INPUT_MODIFIER_SUPER)) {
+			result |= Rml::Input::KM_META;
+		}
 		return result;
 	}
 
@@ -182,11 +240,12 @@ namespace lf {
 		}
 	}
 
-	Scene::Scene(Window& display)
-		: display(display) {
+	Scene::Scene(Window& display) : display(display) {
 		const dim2<u32> size = this->display.size();
 		context = Rml::CreateContext(lf::format("scene-{}", static_cast<const void*>(this)), { static_cast<i32>(size.width), static_cast<i32>(size.height) });
-		if (!context) throw runtime_exception("failed to create RML scene context");
+		if (!context) {
+			throw runtime_exception("failed to create RML scene context");
+		}
 		scope_exit rollback{ [this] { Rml::RemoveContext(context->GetName()); } };
 		if (auto err = Register<Scene>::install(*this); err) {
 			throw runtime_exception(err.message);
@@ -196,26 +255,34 @@ namespace lf {
 
 	Scene::~Scene() {
 		unload_document();
-		if (context) Rml::RemoveContext(context->GetName());
+		if (context) {
+			Rml::RemoveContext(context->GetName());
+		}
 	}
 
 	void Scene::show() {
-		if (rml_document) rml_document->Show();
+		if (rml_document) {
+			rml_document->Show();
+		}
 		display.show();
 	}
 
 	void Scene::set_rml(string_view source) {
 		unload_document();
 		rml_document = context->LoadDocumentFromMemory(Rml::String{ source });
-		if (!rml_document) throw runtime_exception("failed to load RML document");
-		for (Rml::EventId event : { Rml::EventId::Click, Rml::EventId::Change, Rml::EventId::Mousedown, Rml::EventId::Mousemove, Rml::EventId::Mouseup }) {
+		if (!rml_document) {
+			throw runtime_exception("failed to load RML document");
+		}
+		for (Rml::EventId event : { Rml::EventId::Keydown, Rml::EventId::Keyup, Rml::EventId::Click, Rml::EventId::Change, Rml::EventId::Mousedown, Rml::EventId::Mousemove, Rml::EventId::Mouseup }) {
 			rml_document->AddEventListener(event, this);
 		}
 		rml_document->Show();
 	}
 
 	Rml::ElementDocument& Scene::document() {
-		if (!rml_document) throw runtime_exception("scene has no RML document");
+		if (!rml_document) {
+			throw runtime_exception("scene has no RML document");
+		}
 		return *rml_document;
 	}
 
@@ -223,24 +290,13 @@ namespace lf {
 		return lua;
 	}
 
-	error Scene::execute_script(fs::path_view path) {
-		report<vector<u08>> bytes = fs::read_all(path);
-		if (!bytes) {
-			return bytes.error().add_context(lf::format("loading scene script '{}'", path.text()));
-		}
-		const string source(reinterpret_cast<const char*>(bytes->data()), bytes->size());
-		if (!execute_script(source, path.text())) {
-			return error{ generic_errc::parse_error, lf::format("scene script '{}' failed", path.text()) };
+	error Scene::execute_script(string_view source) {
+		auto result = lua.safe_script(source, sol::script_pass_on_error);
+		if (!result.valid()) {
+			const sol::error failure = result;
+			return { generic_errc::parse_error, failure.what() };
 		}
 		return {};
-	}
-
-	void Scene::set_render_rate(frequency rate) {
-		frame_rate.limit(rate);
-	}
-
-	frequency Scene::render_rate() const {
-		return frequency::from_hertz(frame_rate.rate());
 	}
 
 	Window& Scene::window() {
@@ -254,38 +310,78 @@ namespace lf {
 	void Scene::ProcessEvent(Rml::Event& event) {
 		const Rml::String& name = event.GetType();
 		for (Rml::Element* element = event.GetTargetElement(); element; element = element->GetParentNode()) {
-			if (element->HasAttribute("disabled")) return;
+			if (element->HasAttribute("disabled")) {
+				return;
+			}
 			const Rml::String source = element->GetAttribute<Rml::String>(name, "");
 			if (!source.empty()) {
-				execute_script(source, name);
+				if (const auto error = execute_script(source)) {
+					log::Error("[scene] {}: {}", name, error.message);
+				}
+				event.StopPropagation();
 				return;
 			}
 		}
 	}
 
-	bool Scene::execute_script(string_view source, string_view source_name) {
-		sol::protected_function_result result = lua.safe_script(string{ source }, sol::script_pass_on_error);
-		if (result.valid()) return true;
-		sol::error error = result;
-		log::Error("[scene] {}: {}", source_name, error.what());
-		return false;
+	void Scene::keybinds(input_key key, bool down) {
+		if (!down) {
+			auto held = held_keybinds;
+			std::erase_if(held_keybinds, [key](const auto& binding) { return binding.first == key; });
+			for (const auto& binding : held) {
+				if (binding.first == key && binding.second) { binding.second->DispatchEvent("keyup", {}); }
+			}
+			return;
+		}
+		if (std::ranges::any_of(held_keybinds, [key](const auto& binding) { return binding.first == key; })) { return; }
+		Rml::Element* focus = context->GetFocusElement();
+		if (focus && (focus->GetTagName() == "input" || focus->GetTagName() == "textarea" || focus->GetTagName() == "select")) { return; }
+		Rml::ElementList bindings;
+		rml_document->GetElementsByTagName(bindings, "keybind");
+		for (Rml::Element* binding : bindings) {
+			Rml::Element* scope = binding->GetParentNode();
+			if (!scope || !scope->IsVisible() || binding->HasAttribute("disabled")) { continue; }
+			bool active = scope == rml_document || scope->HasAttribute("input-fallback");
+			for (auto* ancestor = focus; ancestor; ancestor = ancestor->GetParentNode()) {
+				active |= ancestor == scope;
+			}
+			if (!active) { continue; }
+			string name = binding->GetAttribute<Rml::String>("key", "");
+			const string action = binding->GetAttribute<Rml::String>("action", "");
+			if (!action.empty()) {
+				auto setting = LoadInputSetting(binding->GetAttribute<Rml::String>("mod", "core"), action);
+				if (setting) { name = *setting; }
+			}
+			if (name != key_name(key)) { continue; }
+			held_keybinds.emplace_back(key, binding->GetObserverPtr());
+			binding->DispatchEvent("keydown", {});
+		}
 	}
 
 	void Scene::input(span<const input_event> events) {
-		if (!rml_document) return;
+		if (!rml_document) {
+			return;
+		}
 		for (const input_event& event : events) {
 			switch (event.type) {
 			case INPUT_EVENT_CONTROL:
 				if (event.control.type == INPUT_CONTROL_BUTTON) {
 					const int button = rml_button(static_cast<input_button>(event.control.value));
-					if (event.state == input_state::Pressed) context->ProcessMouseButtonDown(button, rml_modifiers(event.modifiers));
-					if (event.state == input_state::Released) context->ProcessMouseButtonUp(button, rml_modifiers(event.modifiers));
+					if (event.state == input_state::Pressed) {
+						context->ProcessMouseButtonDown(button, rml_modifiers(event.modifiers));
+					}
+					if (event.state == input_state::Released) {
+						context->ProcessMouseButtonUp(button, rml_modifiers(event.modifiers));
+					}
 				} else if (event.control.type == INPUT_CONTROL_KEY) {
 					const input_key code = static_cast<input_key>(event.control.value);
 					const Rml::Input::KeyIdentifier key = rml_key(code);
-					if (key != Rml::Input::KI_UNKNOWN) {
-						if (event.state == input_state::Pressed) context->ProcessKeyDown(key, rml_modifiers(event.modifiers));
-						if (event.state == input_state::Released) context->ProcessKeyUp(key, rml_modifiers(event.modifiers));
+					if (event.state == input_state::Pressed && (key == Rml::Input::KI_UNKNOWN || context->ProcessKeyDown(key, rml_modifiers(event.modifiers)))) {
+						keybinds(code, true);
+					}
+					if (event.state == input_state::Released) {
+						if (key != Rml::Input::KI_UNKNOWN) { context->ProcessKeyUp(key, rml_modifiers(event.modifiers)); }
+						keybinds(code, false);
 					}
 				}
 				break;
@@ -300,7 +396,13 @@ namespace lf {
 				break;
 			case INPUT_EVENT_CURSOR_ENTER:
 			case INPUT_EVENT_FOCUS:
-				if (event.state == input_state::Up) context->ProcessMouseLeave();
+				if (event.state == input_state::Up) {
+					context->ProcessMouseLeave();
+					if (event.type == INPUT_EVENT_FOCUS) {
+						while (!held_keybinds.empty()) { keybinds(held_keybinds.back().first, false); }
+						if (auto* focus = context->GetFocusElement()) { focus->DispatchEvent("blur", {}); }
+					}
+				}
 				break;
 			case INPUT_EVENT_DROP:
 				break;
@@ -310,10 +412,14 @@ namespace lf {
 	}
 
 	void Scene::render() {
-		if (!display.drawable()) return;
-		const auto commands{ display.begin_frame() };
-		if (!commands) return;
-		const auto ui{ record(commands) };
+		if (!display.drawable()) {
+			return;
+		}
+		const auto commands = display.begin_frame();
+		if (!commands) {
+			return;
+		}
+		const auto ui = record(commands);
 		display.begin_rendering();
 		rt::Cmd::Execute(commands, ui);
 		display.end_frame();
@@ -329,24 +435,23 @@ namespace lf {
 		context->Render();
 		rml_backend->renderer.end();
 
-		frame_rate.mark();
 		return rml_backend->renderer.commands();
 	}
 
 	bool Scene::update() {
-		const auto events{ display.input_events() };
+		const auto events = display.input_events();
 		return update(events);
 	}
 	bool Scene::update(span<const input_event> events) {
-		frame_rate.wait();
 		input(events);
-
-
 		return !display.should_close();
 	}
 
 	void Scene::unload_document() {
-		if (rml_document) context->UnloadDocument(rml_document);
+		held_keybinds.clear();
+		if (rml_document) {
+			context->UnloadDocument(rml_document);
+		}
 		rml_document = nullptr;
 	}
 } // namespace lf

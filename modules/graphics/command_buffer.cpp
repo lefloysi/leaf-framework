@@ -1,12 +1,15 @@
 #include "leaf/graphics/command_buffer.hpp"
 
-namespace rt::Cmd {
+namespace rt::CommandBuffer {
 	handle<command_buffer> Create() {
 		rt_command_buffer command_buffer = rtCommandBufferCreate();
 		detail::check_rutile_error("failed to create command buffer");
 		return { command_buffer };
 	}
+} // namespace rt::CommandBuffer
 
+
+namespace rt::Cmd {
 	void Destroy(handle<command_buffer> command_buffer) {
 		rtCommandBufferDestroy(command_buffer);
 	}

@@ -4,6 +4,10 @@
 #include <leaf/graphics/resource.hpp>
 
 namespace rt {
+	namespace CommandBuffer {
+		handle<command_buffer> Create();
+	}
+
 	struct access {
 		stage_flag stage;
 		access_type type;
@@ -21,7 +25,6 @@ namespace rt {
 } // namespace rt
 
 namespace rt::Cmd {
-	handle<command_buffer> Create();
 	void Destroy(handle<command_buffer> command_buffer);
 	void Reset(view<command_buffer> command_buffer);
 	void Begin(view<command_buffer> command_buffer);

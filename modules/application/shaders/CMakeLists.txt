@@ -1,7 +1,8 @@
-rtsl_embed_program(
-	"leaf-application"
-	leaf_application_shader
+rtsl_add_program("leaf-application-shaders" SOURCES 
 	"${CMAKE_CURRENT_SOURCE_DIR}/application.rtsl"
-	"leaf/graphics/graphics_program"
-	"rt::program_bytes"
+)
+
+rtsl_embed_program("leaf-application"
+	SYMBOL leaf_application_shader
+	PROGRAMS "leaf-application-shaders"
 )

@@ -33,7 +33,7 @@ namespace lf {
 			using db = Database<T>;
 			static_assert(requires(T& prototype) { schema_trait<T>::get(prototype); }, "registered prototype types must provide lf::schema_trait<T>::get(T&)");
 			const auto identity = [](size_t index) {
-				const auto id = typename T::ID{static_cast<typename T::ID::vnum_t>(index + 1)};
+				const auto id = typename T::ID{index};
 				const T& prototype = db::get(id);
 				return PrototypeIdentity{
 					db::type(), static_cast<u64>(id.get()), db::name(id), prototype.local_name.key, prototype.local_description.key,

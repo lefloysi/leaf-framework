@@ -27,7 +27,6 @@ namespace lf {
 		void begin(rt::view<rt::command_buffer> upload_commands, dim2<u32> viewport_size);
 		void end();
 		rt::view<rt::command_buffer> commands() const;
-
 		Rml::CompiledGeometryHandle CompileGeometry(Rml::Span<const Rml::Vertex> vertices, Rml::Span<const int> indices) override;
 		void RenderGeometry(Rml::CompiledGeometryHandle geometry, Rml::Vector2f translation, Rml::TextureHandle texture) override;
 		void ReleaseGeometry(Rml::CompiledGeometryHandle geometry) override;

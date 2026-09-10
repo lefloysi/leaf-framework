@@ -1713,7 +1713,7 @@ namespace lf::fs {
 
 	error init(const native_path& install, const native_path& appdata) {
 		if (!system_mappings.empty()) {
-			return error{ generic_errc::input_error, "filesystem is already initialized" };
+			return error{ generic_errc::invalid_state, "filesystem is already initialized" };
 		}
 		const native_path sources[]{ install, appdata };
 		vector<mapping> mounted;

@@ -26,12 +26,12 @@ namespace lf {
 			constexpr u64 max_negative = max_positive + 1u;
 			if (!negative) {
 				if (magnitude > max_positive) {
-					return unexpected(error(generic_errc::input_error, "fixed value out of range"));
+					return unexpected(error(generic_errc::out_of_range, "fixed value out of range"));
 				}
 				return static_cast<i64>(magnitude);
 			}
 			if (magnitude > max_negative) {
-				return unexpected(error(generic_errc::input_error, "fixed value out of range"));
+				return unexpected(error(generic_errc::out_of_range, "fixed value out of range"));
 			}
 			if (magnitude == max_negative) {
 				return std::numeric_limits<i64>::min();
@@ -42,7 +42,7 @@ namespace lf {
 	static report<i64> checked_scaled_integer(i64 value) {
 			if (value > std::numeric_limits<i64>::max() / fixed::scale ||
 				value < std::numeric_limits<i64>::min() / fixed::scale) {
-				return unexpected(error(generic_errc::input_error, "fixed integer value out of range"));
+				return unexpected(error(generic_errc::out_of_range, "fixed integer value out of range"));
 			}
 			return value * fixed::scale;
 		}
@@ -53,30 +53,30 @@ namespace lf {
 			__int128 scaled = product / static_cast<__int128>(fixed::scale);
 			if (scaled > static_cast<__int128>(std::numeric_limits<i64>::max()) ||
 				scaled < static_cast<__int128>(std::numeric_limits<i64>::min())) {
-				return unexpected(error(generic_errc::input_error, "fixed multiplication overflow"));
+				return unexpected(error(generic_errc::arithmetic_error, "fixed multiplication overflow"));
 			}
 			return static_cast<i64>(scaled);
 		}
 
 	static report<i64> scaled_divide(i64 lhs, i64 rhs) {
 			if (rhs == 0) {
-				return unexpected(error(generic_errc::input_error, "fixed division by zero"));
+				return unexpected(error(generic_errc::arithmetic_error, "fixed division by zero"));
 			}
 			__int128 dividend = static_cast<__int128>(lhs) * static_cast<__int128>(fixed::scale);
 			__int128 quotient = dividend / static_cast<__int128>(rhs);
 			if (quotient > static_cast<__int128>(std::numeric_limits<i64>::max()) ||
 				quotient < static_cast<__int128>(std::numeric_limits<i64>::min())) {
-				return unexpected(error(generic_errc::input_error, "fixed division overflow"));
+				return unexpected(error(generic_errc::arithmetic_error, "fixed division overflow"));
 			}
 			return static_cast<i64>(quotient);
 		}
 #elif defined(_MSC_VER)
 	static report<i64> divide_unsigned_128(u64 high, u64 low, u64 divisor, bool negative, string_view overflow_message) {
 			if (divisor == 0) {
-				return unexpected(error(generic_errc::input_error, "fixed division by zero"));
+				return unexpected(error(generic_errc::arithmetic_error, "fixed division by zero"));
 			}
 			if (high >= divisor) {
-				return unexpected(error(generic_errc::input_error, string(overflow_message)));
+				return unexpected(error(generic_errc::arithmetic_error, string(overflow_message)));
 			}
 			u64 remainder = 0;
 			u64 quotient = _udiv128(high, low, divisor, &remainder);
@@ -94,7 +94,7 @@ namespace lf {
 
 	static report<i64> scaled_divide(i64 lhs, i64 rhs) {
 			if (rhs == 0) {
-				return unexpected(error(generic_errc::input_error, "fixed division by zero"));
+			return unexpected(error(generic_errc::arithmetic_error, "fixed division by zero"));
 			}
 			const bool negative = (lhs < 0) != (rhs < 0);
 			const u64 lhs_abs = sign_magnitude(lhs);
@@ -110,7 +110,7 @@ namespace lf {
 	static report<i64> checked_add_raw(i64 lhs, i64 rhs) {
 			if ((rhs > 0 && lhs > std::numeric_limits<i64>::max() - rhs) ||
 				(rhs < 0 && lhs < std::numeric_limits<i64>::min() - rhs)) {
-				return unexpected(error(generic_errc::input_error, "fixed addition overflow"));
+				return unexpected(error(generic_errc::arithmetic_error, "fixed addition overflow"));
 			}
 			return lhs + rhs;
 		}
@@ -129,7 +129,7 @@ namespace lf {
 
 	report<fixed> fixed::from_ratio(i64 numerator, i64 denominator) {
 		if (denominator == 0) {
-			return unexpected(error(generic_errc::input_error, "fixed ratio denominator is zero"));
+				return unexpected(error(generic_errc::arithmetic_error, "fixed ratio denominator is zero"));
 		}
 		report<i64> raw = scaled_divide(numerator, denominator);
 		if (!raw) {
@@ -148,7 +148,7 @@ namespace lf {
 			--end;
 		}
 		if (begin == end) {
-			return unexpected(error(generic_errc::input_error, "fixed text is empty"));
+				return unexpected(error(generic_errc::parse_error, "fixed text is empty"));
 		}
 
 		bool negative = false;
@@ -156,7 +156,7 @@ namespace lf {
 			negative = text[begin] == '-';
 			++begin;
 			if (begin == end) {
-				return unexpected(error(generic_errc::input_error, "fixed text has no digits"));
+				return unexpected(error(generic_errc::parse_error, "fixed text has no digits"));
 			}
 		}
 
@@ -166,7 +166,7 @@ namespace lf {
 			saw_digit = true;
 			const u64 digit = static_cast<u64>(text[begin] - '0');
 			if (whole > (std::numeric_limits<u64>::max() - digit) / 10u) {
-				return unexpected(error(generic_errc::input_error, "fixed whole part out of range"));
+				return unexpected(error(generic_errc::out_of_range, "fixed whole part out of range"));
 			}
 			whole = whole * 10u + digit;
 			++begin;
@@ -178,7 +178,7 @@ namespace lf {
 			++begin;
 			while (begin < end && ascii_digit(text[begin])) {
 				if (fraction_digits >= 9) {
-					return unexpected(error(generic_errc::input_error, "fixed supports at most 9 fractional digits"));
+				return unexpected(error(generic_errc::parse_error, "fixed supports at most 9 fractional digits"));
 				}
 				fraction = fraction * 10u + static_cast<u64>(text[begin] - '0');
 				++fraction_digits;
@@ -188,10 +188,10 @@ namespace lf {
 		}
 
 		if (!saw_digit) {
-			return unexpected(error(generic_errc::input_error, "fixed text has no digits"));
+			return unexpected(error(generic_errc::parse_error, "fixed text has no digits"));
 		}
 		if (begin != end) {
-			return unexpected(error(generic_errc::input_error, lf::format("invalid fixed character '{}'", text[begin])));
+			return unexpected(error(generic_errc::parse_error, lf::format("invalid fixed character '{}'", text[begin])));
 		}
 		while (fraction_digits < 9) {
 			fraction *= 10u;
@@ -199,11 +199,11 @@ namespace lf {
 		}
 
 		if (whole > std::numeric_limits<u64>::max() / static_cast<u64>(scale)) {
-			return unexpected(error(generic_errc::input_error, "fixed value out of range"));
+			return unexpected(error(generic_errc::out_of_range, "fixed value out of range"));
 		}
 		u64 magnitude = whole * static_cast<u64>(scale);
 		if (magnitude > std::numeric_limits<u64>::max() - fraction) {
-			return unexpected(error(generic_errc::input_error, "fixed value out of range"));
+			return unexpected(error(generic_errc::out_of_range, "fixed value out of range"));
 		}
 		magnitude += fraction;
 
@@ -241,7 +241,7 @@ namespace lf {
 
 	report<fixed> fixed::checked_negated() const {
 		if (raw_value == std::numeric_limits<i64>::min()) {
-			return unexpected(error(generic_errc::input_error, "fixed negation overflow"));
+			return unexpected(error(generic_errc::arithmetic_error, "fixed negation overflow"));
 		}
 		return fixed::from_raw(-raw_value);
 	}

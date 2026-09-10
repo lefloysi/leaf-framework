@@ -58,7 +58,7 @@ namespace lf {
 			throw runtime_exception(lf::format("{} prototype '{}' was initialized out of creation order", type(), name));
 		}
 		T& prototype = prototypes.emplace_back(data);
-		prototype.id = typename T::ID{ static_cast<typename T::ID::vnum_t>(index + 1) };
+		prototype.id = typename T::ID{ index };
 	}
 
 	template<typename T>
@@ -74,7 +74,7 @@ namespace lf {
 		if (!id || id.get() > prototypes.size()) {
 			throw runtime_exception(lf::format("{} prototype id {} is invalid", type(), id.get()));
 		}
-		return names[static_cast<size_t>(id.get() - 1)];
+		return names[usize(id)];
 	}
 
 	template<typename T>
@@ -91,7 +91,7 @@ namespace lf {
 	typename T::ID Database<T>::find(string_view name) {
 		using id_type = typename T::ID;
 		const auto it = names.find(string(name));
-		return it == names.end() ? id_type{} : id_type{ static_cast<typename id_type::vnum_t>(names.index_of(it) + 1) };
+		return it == names.end() ? id_type{} : id_type{ names.index_of(it) };
 	}
 
 	template<typename T>
@@ -99,7 +99,7 @@ namespace lf {
 		if (!id || id.get() > prototypes.size()) {
 			throw runtime_exception(lf::format("{} prototype id {} out of range", type(), id.get()));
 		}
-		return prototypes[id.get() - 1];
+		return prototypes[id];
 	}
 
 	template<typename T>

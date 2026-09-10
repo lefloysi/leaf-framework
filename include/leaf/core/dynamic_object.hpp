@@ -3,6 +3,7 @@
 #include "leaf/core/cast.hpp"
 #include "leaf/core/concepts.hpp"
 #include "leaf/core/distance.hpp"
+#include "leaf/core/normalized.hpp"
 #include "leaf/core/error.hpp"
 #include "leaf/core/exception.hpp"
 #include "leaf/core/schema.hpp"
@@ -369,10 +370,16 @@ namespace lf {
 		}
 	};
 
-	template<>
-	struct object_trait<distance> {
-		static distance parse(const object& obj) {
-			return distance::from_quantum(object_trait<f64>::parse(obj));
+	template<normalized_integer T>
+	struct object_trait<normalized<T>> {
+		static normalized<T> parse(const object& obj) {
+			const f64 value = object_trait<f64>::parse(obj);
+			constexpr f64 minimum = std::is_signed_v<T> ? -1.0 : 0.0;
+			if (!(value >= minimum && value <= 1.0)) {
+				throw runtime_exception("normalized value is outside its range");
+			}
+			const f64 scale = value < 0 ? -f64(normalized<T>::minimum) : f64(normalized<T>::maximum);
+			return normalized<T>{ static_cast<T>(value * scale) };
 		}
 	};
 	template<>
@@ -402,6 +409,12 @@ namespace lf {
 				return static_cast<i64>(obj.get<f64>());
 			}
 			throw lf::runtime_exception(lf::format("cannot convert type '{}' to i64", obj.current_type_name()));
+		}
+	};
+	template<>
+	struct object_trait<distance> {
+		static distance parse(const object& obj) {
+			return distance::from_quantum(object_trait<i64>::parse(obj));
 		}
 	};
 	template<>

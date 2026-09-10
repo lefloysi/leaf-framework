@@ -494,7 +494,7 @@ settings["startup"] = {}
 		if (!fs::exists(path)) {
 			if (required) {
 				log::Error("{}", lf::format("[mod-loader] missing required script: {}/{} ({})", mod.name, file_name, path.text()));
-				return error(generic_errc::input_error, "Missing required prototype script " + mod.name + "/" + string(file_name));
+				return error(generic_errc::not_found, "Missing required prototype script " + mod.name + "/" + string(file_name));
 			}
 			log::Debug("{}", lf::format("[mod-loader] script skipped: {}/{} (missing optional)", mod.name, file_name));
 			return error::no_error;
@@ -855,7 +855,7 @@ end
 	}
 
 	error mod::Load(span<const Source> sources, Progress progress) {
-#define CANCELLED_ERROR error(generic_errc::unknown, "startup cancelled")
+#define CANCELLED_ERROR error(generic_errc::cancelled, "startup cancelled")
 
 
 		log::Info("{}", "[mod-loader] loading mods");
@@ -896,7 +896,7 @@ end
 				auto directory{ fs::open_volume(mod_dir) };
 				if (!directory) { return directory.error(); }
 				if (source.privileged && directory->access() != fs::access_mode::read_only) {
-					return error{ generic_errc::input_error, lf::format("privileged mod source '{}' must be read-only", mod_dir.text()) };
+					return error{ generic_errc::invalid_state, lf::format("privileged mod source '{}' must be read-only", mod_dir.text()) };
 				}
 				const auto info_path{ mod_dir.append("info.yaml") };
 				const auto info_status{ fs::status(info_path) };
@@ -910,7 +910,7 @@ end
 				if (!parsed) { return parsed.error().add_context(lf::format("reading '{}'", info_path.text())); }
 				ModInfo info{ std::move(*parsed) };
 				if (find_mod(mods, info.name)) {
-					return error{ generic_errc::input_error, lf::format("duplicate mod '{}'", info.name) };
+					return error{ generic_errc::conflict, lf::format("duplicate mod '{}'", info.name) };
 				}
 				log::Debug("[mod-loader] discovered {} v{} at {}", info.name, version_to_string(info.mod_version), info.location.text());
 				mods.emplace_back(std::move(info));
@@ -937,7 +937,7 @@ end
 			const auto destination{ fs::path("/").append(mod.name) };
 			const auto status{ fs::status(destination) };
 			if (status) {
-				return error{ generic_errc::input_error, lf::format("mod namespace '{}' is already in use", destination.text()) };
+				return error{ generic_errc::conflict, lf::format("mod namespace '{}' is already in use", destination.text()) };
 			}
 			if (status.error().code != lf::make_error_code(fs::error_code::not_found) &&
 				status.error().code != lf::make_error_code(fs::error_code::not_mapped)) { return status.error(); }

@@ -1,29 +1,34 @@
 #pragma once
 
-#include <leaf/core/types.hpp>
+#include <leaf/core/normalized.hpp>
 
 #include <algorithm>
-#include <cmath>
-#include <random>
 
 namespace lf {
-	inline f32 periodic_value_noise(i32 position, i32 extent, i32 wavelength, u64 seed) {
-		if (extent <= 0 || wavelength <= 0) {
-			return 0.0f;
+	inline normalized<i32> periodic_value_noise(u32 position, u32 extent, u32 wavelength, u64 seed) {
+		if (!extent || !wavelength) {
+			return {};
 		}
-		const i32 sample_count = std::max(1, extent / wavelength);
-		const i32 wrapped_position = (position % extent + extent) % extent;
-		const f32 sample_position = static_cast<f32>(wrapped_position) / static_cast<f32>(extent) * static_cast<f32>(sample_count);
-		const i32 sample = static_cast<i32>(std::floor(sample_position));
-		const auto value_at = [seed, sample_count](i32 index) {
-			const i32 wrapped_index = (index % sample_count + sample_count) % sample_count;
-			std::mt19937 random{ static_cast<u32>(wrapped_index) ^ static_cast<u32>(seed) ^ static_cast<u32>(seed >> 32) };
-			return static_cast<f32>(random() & 0xffffu) / 32767.5f - 1.0f;
+		const u32 count = std::max(1u, extent / wavelength);
+		const u64 scaled = u64(position % extent) * count;
+		const u32 sample = scaled / extent;
+		constexpr u64 maximum = normalized<u32>::maximum;
+		const u64 fraction = (scaled % extent) * maximum / extent;
+		const u64 square = fraction * fraction / maximum;
+		const u64 blend = square + 2 * (square * (maximum - fraction) / maximum);
+		const auto value_at = [seed, count](u32 index) -> i64 {
+			u32 hash = (index % count) ^ u32(seed) ^ u32(seed >> 32);
+			hash ^= hash >> 16;
+			hash *= 0x7feb352du;
+			hash ^= hash >> 15;
+			hash *= 0x846ca68bu;
+			hash ^= hash >> 16;
+			return i64(hash & 0xffffu) * (2 * i64(normalized<i32>::maximum)) / 65535 - normalized<i32>::maximum;
 		};
-		const f32 left = value_at(sample);
-		const f32 right = value_at(sample + 1);
-		const f32 fraction = sample_position - static_cast<f32>(sample);
-		const f32 blend = fraction * fraction * (3.0f - 2.0f * fraction);
-		return left + (right - left) * blend;
+		const i64 left = value_at(sample);
+		const i64 right = value_at(sample + 1);
+		const u64 difference = left < right ? right - left : left - right;
+		const i64 offset = difference * blend / maximum;
+		return normalized<i32>{ i32(left + (left < right ? offset : -offset)) };
 	}
 } // namespace lf

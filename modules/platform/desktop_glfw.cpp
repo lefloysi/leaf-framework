@@ -170,6 +170,11 @@ static void scroll_callback(GLFWwindow* wnd, double x, double y) {
 	}
 }
 
+static void close_callback(GLFWwindow* wnd) {
+	if (lf::Window* window = owner(wnd)) { window->set_should_close(true); }
+	else { glfwHideWindow(wnd); }
+}
+
 static void focus_callback(GLFWwindow* wnd, int focused) {
 	if (lf::Window* window = owner(wnd)) {
 		window->on_focus(focused == GLFW_TRUE);
@@ -218,6 +223,7 @@ namespace lf {
 	}
 
 	void destroy_platform_window(PlatformWindow* wnd) {
+		glfwSetWindowCloseCallback(to_glfw(wnd), nullptr);
 		glfwSetMouseButtonCallback(to_glfw(wnd), nullptr);
 		glfwSetKeyCallback(to_glfw(wnd), nullptr);
 		glfwSetCharCallback(to_glfw(wnd), nullptr);
@@ -240,6 +246,7 @@ namespace lf {
 			return;
 		}
 		glfwSetWindowUserPointer(to_glfw(wnd), owner);
+		glfwSetWindowCloseCallback(to_glfw(wnd), close_callback);
 		glfwSetMouseButtonCallback(to_glfw(wnd), mouse_button_callback);
 		glfwSetKeyCallback(to_glfw(wnd), key_callback);
 		glfwSetCharCallback(to_glfw(wnd), char_callback);
@@ -265,6 +272,10 @@ namespace lf {
 		glfwShowWindow(to_glfw(wnd));
 	}
 
+	void platform_window_hide(PlatformWindow* wnd) {
+		glfwHideWindow(to_glfw(wnd));
+	}
+
 	void platform_window_size(PlatformWindow* wnd, dim2<u32> size) {
 		glfwSetWindowSize(to_glfw(wnd), static_cast<i32>(size.width), static_cast<i32>(size.height));
 	}
@@ -285,7 +296,7 @@ namespace lf {
 
 	bool platform_window_drawable(PlatformWindow* wnd) {
 		GLFWwindow* glfw_window = to_glfw(wnd);
-		if (glfwGetWindowAttrib(glfw_window, GLFW_ICONIFIED) == GLFW_TRUE) {
+		if (glfwWindowShouldClose(glfw_window) || glfwGetWindowAttrib(glfw_window, GLFW_VISIBLE) == GLFW_FALSE || glfwGetWindowAttrib(glfw_window, GLFW_ICONIFIED) == GLFW_TRUE) {
 			return false;
 		}
 

@@ -1,3 +1,5 @@
+find_package(CLI11 CONFIG REQUIRED)
+
 add_library("leaf-graphics" STATIC
 	"buffer.cpp"
 	"command_buffer.cpp"
@@ -21,4 +23,5 @@ target_link_libraries("leaf-graphics"
         "leaf::core"
         "leaf::platform"
         "Rutile::rutile"
+        "CLI11::CLI11"
 )

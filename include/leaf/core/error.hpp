@@ -43,6 +43,15 @@ namespace lf {
 		missing_field,
 		parse_error,
 		type_mismatch,
+		invalid_argument,
+		invalid_state,
+		out_of_range,
+		arithmetic_error,
+		conflict,
+		not_found,
+		limit_exceeded,
+		io_error,
+		cancelled,
 	};
 
 	enum class graphics_errc : i32 {

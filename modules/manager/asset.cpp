@@ -66,7 +66,7 @@ namespace lf::asset {
 	error init(usize worker_count) {
 		std::scoped_lock lock{ records_mutex };
 		if (workers || !worker_count) {
-			return error{ generic_errc::input_error, "invalid asset manager initialization" };
+			return error{ generic_errc::invalid_state, "invalid asset manager initialization" };
 		}
 
 		workers = make_unique<ThreadPool>(worker_count);
@@ -95,14 +95,14 @@ namespace lf::asset {
 																			 existing.crop->pos.x == description.crop->pos.x && existing.crop->pos.y == description.crop->pos.y &&
 																			 existing.crop->dim.width == description.crop->dim.width && existing.crop->dim.height == description.crop->dim.height };
 			if (existing.source == description.source && existing.storage == description.storage && same_crop) {
-				return image::ID{ static_cast<u32>(index + 1), generation };
+				return image::ID{ index, generation };
 			}
 		}
 
 		auto record{ make_unique<image_record>() };
 		record->description = std::move(description);
 		images.emplace_back(std::move(record));
-		return image::ID{ static_cast<u32>(images.size()), generation };
+		return image::ID{ images.size() - 1, generation };
 	}
 
 	shader::description::description(fs::path value, string_view entry)
@@ -125,33 +125,33 @@ namespace lf::asset {
 	report<shader::ID> add(shader::description description) {
 		std::scoped_lock lock{ records_mutex };
 		if (!workers) {
-			return unexpected(error{ generic_errc::input_error, "asset manager is not initialized" });
+			return unexpected(error{ generic_errc::invalid_state, "asset manager is not initialized" });
 		}
 		if (description.entry_point.empty()) {
 			return unexpected(error{ generic_errc::missing_field, "shader entry point is empty" });
 		}
 		if (description.source.empty() == description.bytes.empty()) {
-			return unexpected(error{ generic_errc::input_error, "shader requires exactly one source" });
+			return unexpected(error{ generic_errc::invalid_argument, "shader requires exactly one source" });
 		}
 
 		auto record{ make_unique<shader_record>() };
 		record->description = std::move(description);
 		shaders.emplace_back(std::move(record));
-		return shader::ID{ static_cast<u32>(shaders.size()), generation };
+		return shader::ID{ shaders.size() - 1, generation };
 	}
 
 	image_record* find(image::ID image) {
 		if (image.gen() != generation || !image || image.get() > images.size()) {
 			return nullptr;
 		}
-		return images[image.get() - 1].get();
+		return images[image].get();
 	}
 
 	shader_record* find(shader::ID shader) {
 		if (shader.gen() != generation || !shader || shader.get() > shaders.size()) {
 			return nullptr;
 		}
-		return shaders[shader.get() - 1].get();
+		return shaders[shader].get();
 	}
 
 	group::~group() {
@@ -321,7 +321,7 @@ namespace lf::asset {
 			return unexpected(bytes.error());
 		}
 		if (bytes->size() > std::numeric_limits<int>::max()) {
-			return unexpected(error{ generic_errc::input_error, "image file is too large" });
+			return unexpected(error{ generic_errc::limit_exceeded, "image file is too large" });
 		}
 
 		int width{}, height{};
@@ -334,7 +334,7 @@ namespace lf::asset {
 		if (!crop.dim.width || !crop.dim.height || crop.pos.x >= static_cast<u32>(width) || crop.pos.y >= static_cast<u32>(height) ||
 			crop.dim.width > static_cast<u32>(width) - crop.pos.x || crop.dim.height > static_cast<u32>(height) - crop.pos.y ||
 			crop.dim.width > 8190 || crop.dim.height > 8190) {
-			return unexpected(error{ generic_errc::input_error, "invalid image region" });
+			return unexpected(error{ generic_errc::invalid_argument, "invalid image region" });
 		}
 
 		decoded_image result{ crop.dim, {} };

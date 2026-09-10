@@ -106,7 +106,7 @@ namespace lf {
 		}
 
 		if (!file.eof() && file.fail()) {
-			return error(generic_errc::input_error, lf::format("failed to read '{}'", path.text()));
+			return error(generic_errc::io_error, lf::format("failed to read '{}'", path.text()));
 		}
 		return error::no_error;
 	}

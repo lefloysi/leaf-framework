@@ -255,6 +255,7 @@ namespace lf {
 
 		void set_title(string_view title);
 		void show();
+		void hide();
 		void set_size(dim2<u32> size);
 		void set_fullscreen(bool enabled);
 		bool fullscreen() const;
@@ -275,6 +276,7 @@ namespace lf {
 		bool key_released(input_key key) const;
 		rt::view<rt::framebuffer> current_framebuffer();
 		rt::view<const rt::framebuffer> current_framebuffer() const;
+		void submit(rt::view<rt::command_buffer> commands);
 		rt::view<rt::command_buffer> begin_frame();
 		void begin_rendering();
 		void end_frame();
@@ -302,6 +304,7 @@ namespace lf {
 		bool frame_submitted = false;
 
 		dim2<u32> extent = { 1280, 720 };
+		dim2<u32> framebuffer_extent{};
 		pos2<f32> position = { 100, 100 };
 		pos2<f32> cursor_position{};
 		CursorPrototype::ID current_cursor;

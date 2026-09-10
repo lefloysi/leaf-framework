@@ -96,7 +96,7 @@ namespace lf {
 			return value >= other.value;
 		}
 
-		rep_type value = 0;
+		rep_type value;
 	};
 
 	template<typename Tag, typename Rep, std::integral Scalar>

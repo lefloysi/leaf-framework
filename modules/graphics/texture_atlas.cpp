@@ -54,8 +54,8 @@ namespace lf {
 		if (options.progress) {
 			options.progress(0, progress_total);
 		}
-		std::unordered_map<string, std::pair<int, int>> dimensions;
-		dimensions.reserve(sources.size());
+		std::unordered_map<string, std::pair<int, int>> extent;
+		extent.reserve(sources.size());
 		for (size_t i = 0; i < sources.size(); ++i) {
 			const atlas_source_frame& source = sources[i];
 			if (source.path.empty()) {
@@ -77,7 +77,7 @@ namespace lf {
 			}
 
 			const string resolved_path = path.string();
-			const auto [dimension_it, inserted] = dimensions.try_emplace(resolved_path, 0, 0);
+			const auto [dimension_it, inserted] = extent.try_emplace(resolved_path, 0, 0);
 			if (inserted) {
 				int components = 0;
 				if (!stbi_info(resolved_path.c_str(), &dimension_it->second.first, &dimension_it->second.second, &components)) {
@@ -330,7 +330,7 @@ namespace lf {
 
 		atlas.atlas_texture = rt::unique(rt::Texture::Create());
 		rt::Texture::Resize(atlas.atlas_texture, rt::texture_type::d2, rt::format::rgba8_unorm, { layout.width, layout.height, 1 });
-		rt::unique upload_commands(rt::Cmd::Create());
+		rt::unique upload_commands(rt::CommandBuffer::Create());
 		rt::Cmd::Begin(upload_commands);
 		rt::Cmd::TextureData(upload_commands, atlas.atlas_texture, { rt::texture_aspect_flag::color, 0, 1, 0, 1, { layout.width, layout.height, 1 }, {} }, atlas_pixels.data());
 		rt::Cmd::End(upload_commands);

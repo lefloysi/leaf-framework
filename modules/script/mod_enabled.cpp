@@ -80,6 +80,6 @@ namespace lf {
 			it->second.enabled = enabled;
 			return save_enabled_mods(yaml_path, enabled_mods);
 		}
-		return { generic_errc::input_error, lf::format("unknown mod '{}'", mod_name) };
+		return { generic_errc::invalid_id, lf::format("unknown mod '{}'", mod_name) };
 	}
 } // namespace lf

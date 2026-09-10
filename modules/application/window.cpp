@@ -31,7 +31,7 @@ namespace lf {
 			swapchain = rt::unique(rt::Swapchain::Create());
 			bind_platform_window_swapchain(platform, swapchain);
 			queue = rt::unique(rt::Queue::Create(rt::queue_capability::graphics));
-			frame_command_buffer = rt::unique(rt::Cmd::Create());
+			frame_command_buffer = rt::unique(rt::CommandBuffer::Create());
 			platform_window_owner(platform, this);
 		} catch (...) {
 			swapchain.reset();
@@ -42,6 +42,7 @@ namespace lf {
 	}
 
 	Window::~Window() {
+		hide();
 		discard_frame();
 		rt::Timepoint::Wait(rt::Queue::Flush(queue));
 		frame_command_buffer.reset();
@@ -57,6 +58,10 @@ namespace lf {
 	}
 	void Window::show() {
 		platform_window_show(platform);
+	}
+
+	void Window::hide() {
+		platform_window_hide(platform);
 	}
 	void Window::set_size(dim2<u32> size) {
 		if (fullscreen_enabled) {
@@ -97,10 +102,11 @@ namespace lf {
 
 	void Window::set_should_close(bool should_close) {
 		platform_window_should_close(platform, should_close);
+		if (should_close) { hide(); }
 	}
 
 	dim2<u32> Window::size() const {
-		return fullscreen_enabled ? platform_window_size(platform) : extent;
+		return platform_window_size(platform);
 	}
 
 	std::vector<input_event> Window::input_events() {
@@ -150,7 +156,7 @@ namespace lf {
 		if (frame_submitted) {
 			rt::Swapchain::Present(swapchain, frame_rendered);
 		} else {
-			auto replacement{ rt::unique(rt::Cmd::Create()) };
+			auto replacement = rt::unique(rt::CommandBuffer::Create());
 			frame_command_buffer = std::move(replacement);
 			const rt::timepoint released{ rt::Queue::Flush(queue) };
 			rt::Swapchain::Present(swapchain, released);
@@ -160,14 +166,17 @@ namespace lf {
 		frame_submitted = false;
 	}
 
+	void Window::submit(rt::view<rt::command_buffer> commands) {
+		rt::Timepoint::Wait(rt::Queue::Submit(queue, commands));
+	}
+
 	rt::view<rt::command_buffer> Window::begin_frame() {
 		discard_frame();
+		if (!drawable()) { return {}; }
 		const dim2<u32> actual_framebuffer_size = platform_framebuffer_size(platform);
-		if (fullscreen_enabled || extent.width != actual_framebuffer_size.width || extent.height != actual_framebuffer_size.height) {
+		if (framebuffer_extent.width != actual_framebuffer_size.width || framebuffer_extent.height != actual_framebuffer_size.height) {
 			rt::Swapchain::Resize(swapchain, actual_framebuffer_size.width, actual_framebuffer_size.height);
-			if (!fullscreen_enabled) {
-				extent = actual_framebuffer_size;
-			}
+			framebuffer_extent = actual_framebuffer_size;
 		}
 		const rt_swapchain_acquire_result acquired = rt::Swapchain::Acquire(swapchain);
 		frame_buffer.value = acquired.framebuffer;
@@ -285,7 +294,7 @@ namespace lf {
 		}
 		if (!id) {
 			platform_window_cursor(platform, nullptr);
-			current_cursor = CursorPrototype::ID{ 0 };
+			current_cursor = CursorPrototype::ID{};
 			return true;
 		}
 		const CursorPrototype& cursor = Database<CursorPrototype>::get(id);

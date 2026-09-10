@@ -23,6 +23,7 @@
 #include <utility>
 #include <leaf/core/math/dim.hpp>
 #include <leaf/core/math/pos.hpp>
+#include <leaf/core/math/vec.hpp>
 
 template<typename...>
 lf::error process(...) requires false;
@@ -333,6 +334,8 @@ namespace lf::bin {
 	error process(Stream& stream, optional& value);
 	template<byte_stream Stream, typename Element, size_t Count>
 	error process(Stream& stream, std::array<Element, Count>& value);
+	template<writable_byte_stream Stream, typename Element, size_t Count>
+	error process(Stream& stream, const std::array<Element, Count>& value);
 	template<byte_stream Stream, specialization_of<unordered_map> unordered_map>
 	error process(Stream& stream, unordered_map& value);
 	template<byte_stream Stream, specialization_of<ref> ref>
@@ -1005,6 +1008,16 @@ namespace lf::bin {
 		}
 		return {};
 	}
+	template<writable_byte_stream Stream, typename Element, size_t Count>
+	error process(Stream& stream, const std::array<Element, Count>& value) {
+		if constexpr (bulk_binary_element<Element>) {
+			return process(stream, span<const Element>{value.data(), value.size()});
+		}
+		for (size_t index = 0; index < Count; ++index) {
+			if (auto error = stream(lf::field(lf::format("[{}]", index), value[index]))) { return error; }
+		}
+		return {};
+	}
 	template<byte_stream Stream, specialization_of<unordered_map> unordered_map>
 	error process(Stream& stream, unordered_map& value) {
 		using map = std::remove_cvref_t<unordered_map>;
@@ -1069,7 +1082,7 @@ namespace lf::bin {
 				return err;
 			}
 			if constexpr (readable_byte_stream<Stream>) {
-				value = type{ id };
+				value = type::from_raw(id);
 			}
 			return {};
 		} else {
@@ -1081,7 +1094,7 @@ namespace lf::bin {
 				return err;
 			}
 			if constexpr (readable_byte_stream<Stream>) {
-				value = type{ id, generation };
+				value = type::from_raw(id, generation);
 			}
 			return {};
 		}
@@ -1092,6 +1105,28 @@ namespace lf::bin {
 	error process(Stream& stream, pos2& value) { return stream(lf::field("x", value.x), lf::field("y", value.y)); }
 	template<byte_stream Stream, specialization_of<dim2> dim2>
 	error process(Stream& stream, dim2& value) { return stream(lf::field("width", value.width), lf::field("height", value.height)); }
+	template<byte_stream Stream, glm::length_t Length, typename T, glm::qualifier Qualifier>
+	error process(Stream& stream, glm::vec<Length, T, Qualifier>& value) {
+		if constexpr (Length == 2) {
+			return stream(lf::field("x", value.x), lf::field("y", value.y));
+		} else if constexpr (Length == 3) {
+			return stream(lf::field("x", value.x), lf::field("y", value.y), lf::field("z", value.z));
+		} else {
+			static_assert(Length == 4);
+			return stream(lf::field("x", value.x), lf::field("y", value.y), lf::field("z", value.z), lf::field("w", value.w));
+		}
+	}
+	template<writable_byte_stream Stream, glm::length_t Length, typename T, glm::qualifier Qualifier>
+	error process(Stream& stream, const glm::vec<Length, T, Qualifier>& value) {
+		if constexpr (Length == 2) {
+			return stream(lf::field("x", value.x), lf::field("y", value.y));
+		} else if constexpr (Length == 3) {
+			return stream(lf::field("x", value.x), lf::field("y", value.y), lf::field("z", value.z));
+		} else {
+			static_assert(Length == 4);
+			return stream(lf::field("x", value.x), lf::field("y", value.y), lf::field("z", value.z), lf::field("w", value.w));
+		}
+	}
 	template<byte_stream Stream, data<version> version>
 	error process(Stream& stream, version& value) { return stream(lf::field("major", value.major), lf::field("minor", value.minor), lf::field("patch", value.patch), lf::field("snapshot", value.snapshot)); }
 	template<byte_stream Stream, size_t Amount>

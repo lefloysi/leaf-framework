@@ -1,9 +1,9 @@
 #include "application/rml/render_interface.hpp"
-
 #include "leaf/core/array.hpp"
 #include "leaf/core/filesystem.hpp"
 #include "leaf/core/format.hpp"
 #include "leaf/core/logging.hpp"
+#include "leaf/core/scope.hpp"
 #include "leaf/graphics/buffer.hpp"
 #include "leaf/graphics/command_buffer.hpp"
 #include "leaf/graphics/graphics_program.hpp"
@@ -23,7 +23,7 @@ extern "C" const rt::program_bytes leaf_application_shader;
 namespace lf {
 
 	Renderer::Renderer() {
-		draw_commands = rt::unique(rt::Cmd::Create());
+		draw_commands = rt::unique(rt::CommandBuffer::Create());
 		program = rt::unique(rt::Program::Create());
 		rt::Program::Source(program, "rml", leaf_application_shader);
 		const rt::vertex_layout layout = rt::vertex_layout::Make({ &vertex_input, 1 });

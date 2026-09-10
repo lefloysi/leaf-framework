@@ -3,37 +3,42 @@
 #include "leaf/config.hpp"
 #include "leaf/core/logging.hpp"
 
+#include <CLI/CLI.hpp>
+
 #include <rt_glfw_swapchain.h>
 #include <rt_swapchain.h>
 #include <rutile.h>
 
 #include <cstdlib>
+#include <algorithm>
 #include <iterator>
+#include <string>
+#include <vector>
 
 namespace rt {
 	constexpr string_view DefaultGraphicsAPI = "rt-vulkan";
 
-	error parse_graphics_backend(span<string_view> args, string_view& backend) {
-		for (size_t i = 0; i < args.size(); ++i) {
-			string_view arg = args[i];
-			if (arg == "-g" || arg == "--graphics") {
-				if (i + 1 == args.size() || args[i + 1].empty() || args[i + 1].front() == '-') {
-					return error(generic_errc::input_error, "missing value for -g/--graphics");
-				}
-				backend = args[++i];
-				continue;
-			}
-
-			constexpr string_view LongPrefix = "--graphics=";
-			if (arg.starts_with(LongPrefix)) {
-				string_view value = arg.substr(LongPrefix.size());
-				if (value.empty()) {
-					return error(generic_errc::input_error, "missing value for --graphics");
-				}
-				backend = value;
-			}
+	error parse_graphics_backend(span<string_view> args, string& backend) {
+		std::vector<std::string> arguments;
+		arguments.reserve(args.size());
+		for (string_view argument : args) {
+			arguments.emplace_back(argument);
 		}
-		return error::no_error;
+
+		std::string value;
+		CLI::App cli;
+		cli.allow_extras();
+		cli.add_option("-g,--graphics", value, "Graphics backend");
+		try {
+			std::reverse(arguments.begin(), arguments.end());
+			cli.parse(arguments);
+		} catch (const CLI::ParseError& error) {
+			return { generic_errc::invalid_argument, error.what() };
+		}
+		if (!value.empty()) {
+			backend = value;
+		}
+		return {};
 	}
 
 	void rutile_log_output(const char* message, void*) {
@@ -117,26 +122,23 @@ namespace rt {
 
 	error init_graphics(span<string_view> args) {
 		lf::log::Info("[leaf] Starting graphics...");
-		string_view graphics_api = DefaultGraphicsAPI;
+		string graphics_api{DefaultGraphicsAPI};
 		if (error err = parse_graphics_backend(args, graphics_api)) {
 			return err;
 		}
 		lf::log::Debug("[leaf] Graphics init for '{}'", graphics_api);
-		#if defined(_DEBUG)
-		const char* layers[]{ "rt-validation-layer" };
-		const auto load_result{ rtLoadDevelopment(graphics_api.data(), layers, std::size(layers)) };
-		#else
-		const auto load_result{ rtLoad(graphics_api.data(), nullptr, 0) };
-		#endif
-
-		if (load_result) {
-			lf::log::Error("[leaf] Failed to load graphics backend '{}'", graphics_api);
-			return error(generic_errc::unknown, "rtLoad failed");
+		{
+			const char* layers[] = { "rt-validation-layer" };
+			if (rtLoad(graphics_api.data(), layers, std::size(layers))) {
+				lf::log::Error("[leaf] Failed to load graphics backend '{}'", graphics_api);
+				return error(generic_errc::unknown, "rtLoad failed");
+			}
 		}
+
 		lf::log::Debug("[leaf] Loaded graphics backend '{}'", graphics_api);
 		rtSetOutput(rutile_log_output, nullptr);
-		const char* features[]{ RT_FEATURE_PRESENTATION };
-		rtInit(features, 1);
+		const char* features[] = { RT_FEATURE_PRESENTATION };
+		rtInit(features, std::size(features));
 
 		error err = rutile_error(rtError(), "rtInit");
 		if (err) {
@@ -148,16 +150,15 @@ namespace rt {
 	}
 
 	error init_graphics_extensions() {
-
-			rtLoadSwapchain();
-			if (error err = rutile_error(rtError(), "rtLoadSwapchain")) {
-				return err;
-			}
-			rtLoadGlfwSwapchain();
-			if (error err = rutile_error(rtError(), "rtLoadGlfwSwapchain")) {
-				return err;
-			}
-			lf::log::Trace("[leaf] Loaded Rutile swapchain and GLFW presentation extensions");
+		rtLoadSwapchain();
+		if (error err = rutile_error(rtError(), "rtLoadSwapchain")) {
+			return err;
+		}
+		rtLoadGlfwSwapchain();
+		if (error err = rutile_error(rtError(), "rtLoadGlfwSwapchain")) {
+			return err;
+		}
+		lf::log::Trace("[leaf] Loaded Rutile swapchain and GLFW presentation extensions");
 		return error::no_error;
 	}
 

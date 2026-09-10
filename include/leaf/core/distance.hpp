@@ -3,5 +3,5 @@
 #include "leaf/core/unit.hpp"
 
 namespace lf {
-	using distance = unit<struct distance_tag, f64>;
+	using distance = unit<struct distance_tag, i64>;
 }

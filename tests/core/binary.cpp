@@ -243,7 +243,7 @@ TEST_CASE("binary containers use their process overloads") {
 }
 
 TEST_CASE("binary arrays maps and raw data round-trip") {
-	std::array<u32, 3> array{ 2, 4, 6 };
+	const std::array<u32, 3> array{ 2, 4, 6 };
 	lf::unordered_map<u32, lf::string> map;
 	map.emplace(1, "one");
 	map.emplace(2, "two");

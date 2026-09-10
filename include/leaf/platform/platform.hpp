@@ -30,6 +30,7 @@ namespace lf {
 	void platform_window_clear_owner(PlatformWindow* window);
 	void platform_window_title(PlatformWindow* window, string_view title);
 	void platform_window_show(PlatformWindow* window);
+	void platform_window_hide(PlatformWindow* window);
 	void platform_window_size(PlatformWindow* window, dim2<u32> size);
 	dim2<u32> platform_window_size(PlatformWindow* window);
 	dim2<u32> platform_framebuffer_size(PlatformWindow* window);

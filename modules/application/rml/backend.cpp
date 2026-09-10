@@ -11,7 +11,7 @@ namespace lf {
 
 	error RmlBackend::register_element(string_view tag, unique_ptr<Rml::ElementInstancer> instancer) {
 		if (tag.empty() || !instancer) {
-			return error(generic_errc::input_error, "Rml element registrations require a tag and instancer");
+			return error(generic_errc::invalid_argument, "Rml element registrations require a tag and instancer");
 		}
 		Rml::Factory::RegisterElementInstancer(Rml::String(tag), instancer.get());
 		instancers.emplace_back(std::move(instancer));
@@ -36,6 +36,7 @@ namespace lf {
 			return error(generic_errc::unknown, "Rml::Initialise failed");
 		}
 
+		Rml::Factory::RegisterContextInstancer(&backend->context_instancer);
 		if (error result = Register<RmlBackend>::install(*backend); result) {
 			Rml::Shutdown();
 			Rml::SetRenderInterface(nullptr);

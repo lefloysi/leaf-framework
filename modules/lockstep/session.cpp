@@ -186,7 +186,7 @@ namespace lf::lockstep {
 		Options options;
 		Tick current_tick = 0;
 		Session::ID local_session{};
-		Command::ID next_command_id{ 1 };
+		Command::ID next_command_id{ 0 };
 		vector<pending_payload> pending_payloads;
 		vector<PendingPayload> pending_views;
 		vector<ReadyTick> ready_ticks;
@@ -243,7 +243,7 @@ namespace lf::lockstep {
 		vector<queued_send> send_queue;
 		vector<stored_payload> staged_commands;
 		vector<scheduled_payload> scheduled_commands;
-		Session::ID next_session_id{ 2 };
+		Session::ID next_session_id{ 1 };
 		u64 next_snapshot_id = 1;
 	};
 
@@ -319,7 +319,7 @@ struct lf::bin::enum_validator<lf::lockstep::packet_kind> {
 };
 
 namespace lf::lockstep {
-	constexpr Session::ID host_session_id{ 1 };
+	constexpr Session::ID host_session_id{ 0 };
 
 	host_connection::host_connection(const net::Peer& peer, Session::ID session_id)
 		: peer(peer), session_id(session_id) {}
@@ -333,7 +333,7 @@ namespace lf::lockstep {
 
 	stored_payload Session::Impl::make_payload(span<const byte> bytes, Session::ID source, bool track_pending) {
 		const Command::ID id = next_command_id;
-		next_command_id = Command::ID{ next_command_id.get() + 1 };
+		next_command_id = Command::ID::from_raw(next_command_id.get() + 1);
 
 		stored_payload payload;
 		payload.id = id;
@@ -687,7 +687,7 @@ namespace lf::lockstep {
 			field("session_id", wire_session_id),
 			field("packet_sequence", wire_packet_sequence)
 		));
-		session_id = Session::ID{ wire_session_id };
+		session_id = Session::ID::from_raw(wire_session_id);
 		packet_sequence = wire_packet_sequence;
 		return {};
 	}
@@ -911,7 +911,7 @@ namespace lf::lockstep {
 				return {};
 			}
 			IF_ERROR_RETURN_ERROR(stream(field("session_id", wire_session_id)));
-			accepted_session_id = Session::ID{ wire_session_id };
+			accepted_session_id = Session::ID::from_raw(wire_session_id);
 
 			session.session_id = accepted_session_id;
 			session.local_session = accepted_session_id;
@@ -1250,7 +1250,7 @@ namespace lf::lockstep {
 			}
 		}
 		const Session::ID session_id = next_session_id;
-		next_session_id = Session::ID{ next_session_id.get() + 1 };
+		next_session_id = Session::ID::from_raw(next_session_id.get() + 1);
 		connections.emplace_back(peer, session_id);
 		return connections.back();
 	}

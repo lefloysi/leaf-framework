@@ -19,7 +19,7 @@ namespace lf {
 
 	error ShaderPrototype::load() {
 		if (!path.empty() && !bytes.empty()) {
-			return error{ generic_errc::input_error, "shader has both a source path and embedded bytes" };
+			return error{ generic_errc::invalid_argument, "shader has both a source path and embedded bytes" };
 		}
 		asset::shader::description description{};
 		if (bytes.empty()) {

@@ -58,9 +58,9 @@ namespace lf {
 		if (options.progress) {
 			options.progress->add_total(static_cast<u64>(sources.size()));
 		}
-		std::unordered_map<string, std::pair<int, int>> dimensions;
+		std::unordered_map<string, std::pair<int, int>> extent;
 		std::unordered_map<string, std::shared_ptr<const vector<byte>>> source_bytes;
-		dimensions.reserve(sources.size());
+		extent.reserve(sources.size());
 		source_bytes.reserve(sources.size());
 		for (size_t i = 0; i < sources.size(); ++i) {
 			const atlas_source_frame& source = sources[i];
@@ -98,7 +98,7 @@ namespace lf {
 				continue;
 			}
 
-			const auto [dimension_it, inserted] = dimensions.try_emplace(source.path, 0, 0);
+			const auto [dimension_it, inserted] = extent.try_emplace(source.path, 0, 0);
 			if (inserted) {
 				int components = 0;
 				if (!stbi_info_from_memory(reinterpret_cast<const stbi_uc*>(bytes_it->second->data()), static_cast<int>(bytes_it->second->size()), &dimension_it->second.first, &dimension_it->second.second, &components)) {
@@ -228,7 +228,15 @@ namespace lf {
 		return { .texture_index = frame.texture_index, .frame_index = frame.frame_index, .rect = { .pos = { .x = safe_cast<f32>(frame.destination.x + safe_cast<i32>(padding)) / safe_cast<f32>(atlas_width), .y = safe_cast<f32>(frame.destination.y + safe_cast<i32>(padding)) / safe_cast<f32>(atlas_height) }, .dim = { .width = safe_cast<f32>(frame.source.dim.width) / safe_cast<f32>(atlas_width), .height = safe_cast<f32>(frame.source.dim.height) / safe_cast<f32>(atlas_height) } } };
 	}
 
-	texture_atlas build_texture_atlas(rt::view<rt::queue> queue, span<const atlas_source_frame> source_frames, texture_atlas_options options) {
+	texture_atlas build_texture_atlas(rt::view<rt::queue> queue, span<const atlas_source_frame> source_frames, texture_atlas_options setup) {
+		texture_atlas_options options{ .padding = setup.padding, .max_frame_extent = setup.max_frame_extent };
+		if (setup.progress) {
+			setup.progress->add("inspect");
+			setup.progress->add("pack");
+			setup.progress->add("decode");
+			setup.progress->add("upload");
+			options.progress.emplace((*setup.progress)());
+		}
 		const auto build_start = std::chrono::steady_clock::now();
 		texture_atlas atlas;
 		vector<atlas_frame> frames = inspect_frames(source_frames, options);
@@ -241,6 +249,7 @@ namespace lf {
 		}
 		log::Info("[textures] atlas inspect: {} valid frames max={}x{} in {:.3f}s", frames.size(), max_frame_width, max_frame_height, std::chrono::duration<f64>(inspect_done - build_start).count());
 
+		if (setup.progress) { options.progress.emplace((*setup.progress)()); }
 		packed_atlas_layout layout = pack_frames(frames, options);
 		const auto pack_done = std::chrono::steady_clock::now();
 		log::Info("[textures] atlas pack: {}x{} in {:.3f}s", layout.width, layout.height, std::chrono::duration<f64>(pack_done - inspect_done).count());
@@ -270,6 +279,7 @@ namespace lf {
 		}
 
 		if (options.progress) {
+			options.progress.emplace((*setup.progress)());
 			options.progress->add_total(static_cast<u64>(frames.size()));
 		}
 		vector<stbi_uc> atlas_pixels;
@@ -337,9 +347,10 @@ namespace lf {
 		const auto decode_done = std::chrono::steady_clock::now();
 		log::Info("[textures] atlas decode/copy: {} groups in {:.3f}s", upload_groups.size(), std::chrono::duration<f64>(decode_done - pack_done).count());
 
-		atlas.atlas_texture = rt::unique(rt::Texture::Create());
+		if (setup.progress) { options.progress.emplace((*setup.progress)()); }
+		atlas.atlas_texture = rt::unique{ rt::Texture::Create() };
 		rt::Texture::Resize(atlas.atlas_texture, rt::texture_type::d2, rt::format::rgba8_unorm, { layout.width, layout.height, 1 });
-		rt::unique<rt::command_buffer> upload_commands(rt::Cmd::Create());
+		rt::unique<rt::command_buffer> upload_commands(rt::CommandBuffer::Create());
 		rt::Cmd::Begin(upload_commands);
 		rt::Cmd::TextureData(upload_commands, atlas.atlas_texture, { rt::texture_aspect_flag::color, 0, 1, 0, 1, { layout.width, layout.height, 1 }, {} }, atlas_pixels.data());
 		rt::Cmd::End(upload_commands);

@@ -1,17 +1,16 @@
 #pragma once
 
 #include "leaf/core/error.hpp"
-#include "leaf/core/filesystem.hpp"
-#include "leaf/core/rate.hpp"
 #include "leaf/core/string.hpp"
-#include "leaf/core/time.hpp"
 #include "leaf/application/window.hpp"
 #include "leaf/script/state.hpp"
 
 #include <RmlUi/Core/EventListener.h>
+#include <RmlUi/Core/ObserverPtr.h>
 
 namespace Rml {
 	class Context;
+	class Element;
 	class ElementDocument;
 	class Event;
 }
@@ -27,31 +26,30 @@ namespace lf {
 		bool update(span<const input_event> events);
 		void render();
 		rt::view<rt::command_buffer> record(rt::view<rt::command_buffer> uploads);
-
 		void set_rml(string_view source);
+		void set_rml(const char* source, usize size) {
+			set_rml(string_view(source, size));
+		}
 		Rml::ElementDocument& document();
 		sol::state& script_state();
-		/*! @brief Executes one Lua source file from Leaf's virtual filesystem. */
-		error execute_script(fs::path_view path);
-
-		void set_render_rate(frequency rate);
-		frequency render_rate() const;
+		error execute_script(string_view source);
 
 		Window& window();
 		const Window& window() const;
 
+		void unload_document();
 	  private:
 		void input(span<const input_event> events);
+		void keybinds(input_key key, bool down);
+		vector<std::pair<input_key, Rml::ObserverPtr<Rml::Element>>> held_keybinds;
 
-		void unload_document();
-		bool execute_script(string_view source, string_view source_name);
+
 		void ProcessEvent(Rml::Event& event) override;
 
 		Window& display;
 		Rml::Context* context = nullptr;
 		Rml::ElementDocument* rml_document = nullptr;
 		sol::state lua = CreateState();
-		RateMeter frame_rate;
 	};
 } // namespace lf
 
