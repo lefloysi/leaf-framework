@@ -27,3 +27,34 @@ TEST_CASE("frequency preserves integral and fractional hertz values") {
 	REQUIRE(integral.hertz().raw() == 60 * lf::fixed::scale);
 	REQUIRE(lf::frequency::from_hertz(2.5).hertz_value() == 2.5);
 }
+
+TEST_CASE("frequency periods preserve session timing") {
+	REQUIRE(lf::frequency::from_hertz(62.5).period().quantum_count() == 16'000'000);
+	REQUIRE(lf::frequency::from_hertz(125).period().quantum_count() == 8'000'000);
+	REQUIRE_THROWS(lf::frequency{}.period());
+	REQUIRE_THROWS(lf::frequency::from_hertz(-1).period());
+}
+
+TEST_CASE("native sleeping waits for monotonic deadlines") {
+	const auto delay = lf::duration::from_quantum(2'000'000);
+	const auto start = lf::now();
+	lf::sleep_for(delay);
+	REQUIRE(lf::now() - start >= delay);
+
+	const auto deadline = lf::now() + delay;
+	lf::sleep_until(deadline);
+	REQUIRE(lf::now() >= deadline);
+
+	lf::sleep_until(start);
+	lf::sleep_for(lf::duration{});
+	lf::sleep_for(-delay);
+	REQUIRE(lf::now() >= deadline);
+}
+
+TEST_CASE("native wall clock uses the Unix epoch") {
+	const auto before = std::chrono::system_clock::now().time_since_epoch();
+	const auto value = lf::wall_now().since_unix_epoch();
+	const auto after = std::chrono::system_clock::now().time_since_epoch();
+	REQUIRE(value >= lf::duration::from_chrono(before));
+	REQUIRE(value <= lf::duration::from_chrono(after));
+}

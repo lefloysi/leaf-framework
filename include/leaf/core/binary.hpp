@@ -254,6 +254,7 @@ namespace lf::bin {
 	struct fixed_write_stream {
 		using stream_tag = write_stream_tag;
 		explicit fixed_write_stream(span<lf::byte> output);
+		span<const lf::byte> written() const;
 		error bytes(const lf::byte* input, size_t count);
 		error padding(size_t count);
 		template<schema_node... Fields> error operator()(Fields&&... fields);
@@ -551,6 +552,7 @@ namespace lf::bin {
 	inline void write_stream::advance_progress(size_t value) { if (progress_value) { progress_value->advance(static_cast<u64>(value)); } }
 
 	inline write_refs& fixed_write_stream::refs() { return refs_value; }
+	inline span<const lf::byte> fixed_write_stream::written() const { return { output.data(), cursor_value }; }
 	inline const string& fixed_write_stream::context() const { return context_value; }
 	inline void fixed_write_stream::set_context(string value) { context_value = std::move(value); }
 	inline void fixed_write_stream::set_progress(optional<Progress> value) { progress_value = std::move(value); }

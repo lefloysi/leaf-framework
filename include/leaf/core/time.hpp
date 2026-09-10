@@ -201,6 +201,8 @@ namespace lf {
 			return static_cast<f64>(value.raw()) / static_cast<f64>(fixed::scale);
 		}
 
+		duration period() const;
+
 		constexpr bool operator==(const frequency&) const = default;
 		constexpr auto operator<=>(const frequency&) const = default;
 
@@ -211,6 +213,8 @@ namespace lf {
 	};
 
 	instant now();
+	void sleep_for(duration duration);
+	void sleep_until(instant deadline);
 
 	/*! @brief Gets the current UTC wall-clock time. */
 	timepoint wall_now();
