@@ -1,6 +1,7 @@
 #pragma once
 
 #include "leaf/core/array.hpp"
+#include "leaf/core/binary.hpp"
 #include "leaf/core/identifier.hpp"
 #include "leaf/core/optional.hpp"
 #include "leaf/core/types.hpp"
@@ -134,7 +135,47 @@ namespace lf {
 
 		struct slot {
 			array<size_t, sizeof...(Component)> components{};
+
+			template<bin::byte_stream Stream, bin::data<slot> Value>
+			friend error process(Stream& stream, Value& value) {
+				return stream(field("components", value.components));
+			}
 		};
+
+		template<bin::byte_stream Stream, bin::data<component_container> Value>
+		friend error process(Stream& stream, Value& value) {
+			if (auto result = stream(field("slots", value.slots), field("free", value.free))) { return result; }
+			error result;
+			std::apply([&](auto&... storage) {
+				((!result && !(result = stream(field("values", storage.first), field("owners", storage.second)))) && ...);
+			}, value.components);
+			if (result) { return result; }
+			if constexpr (bin::readable_byte_stream<Stream>) {
+				vector<bool> available(value.slots.size());
+				for (usize index : value.free) {
+					if (index >= available.size() || available[index]) { return { generic_errc::input_error, "Invalid free entity slot" }; }
+					available[index] = true;
+				}
+				usize component = 0;
+				std::apply([&](const auto&... storage) {
+					([&] {
+						const auto& [values, owners] = storage;
+						if (values.empty() || values.size() != owners.size()) { result = { generic_errc::input_error, "Invalid component storage" }; return; }
+						for (usize index = 1; index < owners.size(); ++index) {
+							if (owners[index] >= value.slots.size() || available[owners[index]] || value.slots[owners[index]].components[component] != index) {
+								result = { generic_errc::input_error, "Invalid component owner" }; return;
+							}
+						}
+						for (usize index = 0; index < value.slots.size(); ++index) {
+							const usize dense = value.slots[index].components[component];
+							if (dense >= values.size() || (dense && owners[dense] != index)) { result = { generic_errc::input_error, "Invalid component index" }; return; }
+						}
+						++component;
+					}(), ...);
+				}, value.components);
+			}
+			return result;
+		}
 
 		component_container() {
 			(std::get<component_index<Component>>(components).first.emplace_back(), ...);
@@ -164,6 +205,14 @@ namespace lf {
 
 		entity get(Handle value) {
 			return entity{ *this, value };
+		}
+
+		size_t slot_count() const {
+			return slots.size();
+		}
+
+		const vector<size_t>& free_slots() const {
+			return free;
 		}
 
 		template<typename T>

@@ -1,5 +1,6 @@
 add_library("leaf-network" STATIC
     "peer.cpp"
+    "channel.cpp"
     "socket.cpp"
 )
 add_library("leaf::network" ALIAS "leaf-network")

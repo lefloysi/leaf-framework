@@ -40,6 +40,8 @@ namespace leaf_test::binary {
 		u32 value = 0;
 	};
 
+	struct migrated_record { i64 value = 0; };
+
 	struct identifier_target {};
 
 	struct graph_node : lf::bin::reference {
@@ -142,6 +144,56 @@ template<>
 struct lf::schema_trait<leaf_test::binary::wrong_result_record, leaf_test::binary::schema_version> {
 	static auto get(leaf_test::binary::wrong_result_record& value) { return lf::group(lf::field("fallback", value.value)); }
 };
+
+template<>
+struct lf::schema_trait<leaf_test::binary::migrated_record, lf::version{1}> {
+	static auto get(auto& value) { return lf::group(lf::field("value", value.value)); }
+};
+
+template<>
+struct lf::schema_trait<leaf_test::binary::migrated_record, lf::version{2}> {
+	static auto get(auto& value) { return lf::group(lf::field("value", value.value)); }
+};
+
+template<>
+inline constexpr auto lf::migration_source<leaf_test::binary::migrated_record, lf::version{2}> = lf::version{1};
+
+template<>
+struct lf::migrate_trait<leaf_test::binary::migrated_record, lf::version{2}> {
+	static lf::error apply(leaf_test::binary::migrated_record& value) { value.value *= 10; return {}; }
+};
+
+TEST_CASE("binary runtime source version loads and migrates to the target") {
+	leaf_test::binary::migrated_record original{7};
+	lf::bin::write_stream writer;
+	REQUIRE_FALSE(writer(lf::field("record", original, lf::schema_version<lf::version{1}>{})));
+	leaf_test::binary::migrated_record restored;
+	lf::bin::read_stream reader{writer.written()};
+	REQUIRE_FALSE(lf::bin::process(reader, restored, lf::schema_version<lf::version{2}>{}, lf::version{1}));
+	REQUIRE(restored.value == 70);
+	lf::bin::read_stream unsupported{writer.written()};
+	REQUIRE(lf::bin::process(unsupported, restored, lf::schema_version<lf::version{2}>{}, lf::version{3}));
+}
+
+TEST_CASE("binary ordinary schemas and unique ownership round trip") {
+	auto original = std::make_unique<leaf_test::binary::graph_node>();
+	original->value = 42;
+	auto bytes = lf::bin::write(original);
+	REQUIRE(bytes);
+	auto restored = lf::bin::read<std::unique_ptr<leaf_test::binary::graph_node>>(*bytes);
+	REQUIRE(restored);
+	REQUIRE((*restored)->value == 42);
+}
+
+TEST_CASE("binary field errors retain their path") {
+	lf::bin::read_stream stream{{}};
+	lf::pos2<i64> value{};
+	auto error = stream(lf::field("position", value));
+	REQUIRE(error);
+	INFO(error.message);
+	REQUIRE(error.message.find("position") != lf::string::npos);
+	REQUIRE(error.message.find("x") != lf::string::npos);
+}
 
 TEST_CASE("random seed consumes the full URBG result width") {
 	leaf_test::binary::narrow_urbg generator;
@@ -342,4 +394,24 @@ TEST_CASE("binary references resolve through a graph base") {
 	auto decoded = lf::bin::read<leaf_test::binary::graph_base_reference>(*bytes);
 	REQUIRE(decoded.has_value());
 	REQUIRE(decoded->link.get() == static_cast<leaf_test::binary::graph_base*>(&decoded->value));
+}
+
+TEST_CASE("byte vectors preserve their scalar wire format", "[binary]") {
+	lf::vector<lf::byte> source;
+	for (usize value = 0; value < 256; ++value) {
+		source.push_back(static_cast<lf::byte>(value));
+	}
+	lf::bin::write_stream scalar;
+	auto count = lf::bin::size{ source.size() };
+	REQUIRE_FALSE(scalar(lf::field("size", count)));
+	for (auto value : source) {
+		REQUIRE_FALSE(scalar(lf::field("byte", value)));
+	}
+	const auto encoded = lf::bin::write(source);
+	REQUIRE(encoded);
+	REQUIRE(*encoded == scalar.written());
+	const auto decoded = lf::bin::read<lf::vector<lf::byte>>(*encoded);
+	REQUIRE(decoded);
+	REQUIRE(*decoded == source);
+	static_assert(lf::bin::bulk_binary_element<lf::byte>);
 }

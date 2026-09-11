@@ -15,12 +15,17 @@
 #include <utility>
 
 namespace lf {
-	error Init(span<string_view> args) {
+	error Init(span<string_view> args, string_view application) {
 		if (error result{ init_system(args) }) {
 			return result;
 		}
 
 		scope_exit system_cleanup{ exit_system };
+		if (!application.empty()) {
+			const auto directory = GetAppdataDir() / fs::native_path{ application };
+			OverwriteAppdataDir(directory.string());
+			if (auto created = fs::native_volume(directory, { fs::access_mode::read_write, fs::missing_action::create }); !created) { return created.error(); }
+		}
 
 		if (error result{ fs::init(GetInstallDir(), GetAppdataDir()) }) {
 			return result;

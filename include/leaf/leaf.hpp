@@ -9,7 +9,7 @@
 #include <leaf/application/window.hpp>
 
 namespace lf {
-	error Init(span<string_view> args);
+	error Init(span<string_view> args, string_view application = {});
 	bool Update();
 	void Exit();
 }

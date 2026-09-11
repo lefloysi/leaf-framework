@@ -28,3 +28,11 @@ target_link_libraries("leaf-tests" PRIVATE
 catch_discover_tests("leaf-tests"
     TEST_PREFIX "leaf::"
 )
+
+add_executable(leaf-network-tests EXCLUDE_FROM_ALL network/channel.cpp)
+target_link_libraries(leaf-network-tests PRIVATE leaf::network leaf::lockstep leaf::store-standalone Catch2::Catch2WithMain)
+catch_discover_tests(leaf-network-tests TEST_PREFIX "leaf::network::")
+
+add_executable(leaf-binary-tests EXCLUDE_FROM_ALL core/binary.cpp)
+target_link_libraries(leaf-binary-tests PRIVATE leaf::core Catch2::Catch2WithMain)
+catch_discover_tests(leaf-binary-tests TEST_PREFIX "leaf::binary::")
