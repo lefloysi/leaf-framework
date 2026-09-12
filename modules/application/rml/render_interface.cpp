@@ -21,6 +21,10 @@
 extern "C" const rt::program_bytes leaf_application_shader;
 
 namespace lf {
+	bool Renderer::UiVertex::operator==(const UiVertex& other) const {
+		return position.x == other.position.x && position.y == other.position.y &&
+			uv.x == other.uv.x && uv.y == other.uv.y && std::ranges::equal(color, other.color);
+	}
 
 	Renderer::Renderer() {
 		draw_commands = rt::unique(rt::CommandBuffer::Create());
@@ -237,16 +241,15 @@ namespace lf {
 		}
 
 		const u64 vertex_bytes = static_cast<u64>(vertices.size() * sizeof(UiVertex));
-		if (batch_vertex_buffer_index >= batch_vertex_buffers.size()) {
-			batch_vertex_buffers.emplace_back(rt::Buffer::Create());
-			batch_vertex_buffer_sizes.push_back(vertex_bytes);
-			rt::Buffer::Resize(batch_vertex_buffers.back(), rt::memory_type::device, vertex_bytes);
-		} else if (batch_vertex_buffer_sizes[batch_vertex_buffer_index] < vertex_bytes) {
-			batch_vertex_buffer_sizes[batch_vertex_buffer_index] = vertex_bytes;
-			rt::Buffer::Resize(batch_vertex_buffers[batch_vertex_buffer_index], rt::memory_type::device, vertex_bytes);
+		if (batch_vertex_buffer_index >= batches.size()) {
+			batches.push_back({ rt::unique{ rt::Buffer::Create() } });
 		}
-		rt::view<rt::buffer> draw_vertices = batch_vertex_buffers[batch_vertex_buffer_index];
-		++batch_vertex_buffer_index;
+		auto& batch = batches[batch_vertex_buffer_index++];
+		if (batch.capacity < vertex_bytes) {
+			batch.capacity = vertex_bytes;
+			rt::Buffer::Resize(batch.buffer, rt::memory_type::device, batch.capacity);
+		}
+		rt::view<rt::buffer> draw_vertices = batch.buffer;
 
 		UiUniform uniform{};
 		uniform.viewport_size[0] = static_cast<f32>(std::max(1u, current_framebuffer_size.width));
@@ -256,14 +259,17 @@ namespace lf {
 		uniform.texture_mode = texture_data == white_texture ? 0.0f : 1.0f;
 		rt::Cmd::UseProgram(current_command_buffer, program);
 
-		rt::Cmd::BufferData(frame_upload_commands, draw_vertices, { vertex_bytes, 0 }, reinterpret_cast<const u08*>(vertices.data()));
-		rt::Cmd::BufferBarrier(
-			frame_upload_commands,
-			draw_vertices,
-			{ vertex_bytes, 0 },
-			{ rt::stage_flag::transfer, rt::access_type::write },
-			{ rt::stage_flag::vertex, rt::access_type::read }
-		);
+		if (batch.vertices != vertices) {
+			rt::Cmd::BufferData(frame_upload_commands, draw_vertices, { vertex_bytes, 0 }, reinterpret_cast<const u08*>(vertices.data()));
+			rt::Cmd::BufferBarrier(
+				frame_upload_commands,
+				draw_vertices,
+				{ vertex_bytes, 0 },
+				{ rt::stage_flag::transfer, rt::access_type::write },
+				{ rt::stage_flag::vertex, rt::access_type::read }
+			);
+			batch.vertices = vertices;
+		}
 		rt::Cmd::SetScissor(current_command_buffer, scissor_position.x, scissor_position.y, scissor_size.width, scissor_size.height);
 		rt::Cmd::UniformData(current_command_buffer, uniform_location, reinterpret_cast<const u08*>(&uniform), sizeof(uniform));
 		if (bound_texture != texture_data) {

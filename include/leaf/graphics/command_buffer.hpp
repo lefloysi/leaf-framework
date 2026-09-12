@@ -46,6 +46,7 @@ namespace rt::Cmd {
 	void BindTexture(view<command_buffer> command_buffer, location location, view<texture_view> texture_view);
 	void BindSampler(view<command_buffer> command_buffer, location location, view<sampler> sampler);
 	void BufferData(view<command_buffer> command_buffer, view<buffer> buffer, rt_buffer_range range, const u08* data);
+	void BufferCopy(view<command_buffer> command_buffer, view<buffer> src, rt_buffer_range src_range, view<buffer> dst, rt_buffer_range dst_range);
 	void BufferBarrier(view<command_buffer> command_buffer, view<buffer> buffer, rt_buffer_range range, access src, access dst);
 	void TextureData(view<command_buffer> command_buffer, view<texture> texture, texture_range range, const u08* data);
 	void TextureBarrier(view<command_buffer> command_buffer, view<texture> texture, texture_range range, access src, access dst);

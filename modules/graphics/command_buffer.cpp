@@ -114,6 +114,11 @@ namespace rt::Cmd {
 		detail::check_rutile_error("failed to upload buffer data");
 	}
 
+	void BufferCopy(view<command_buffer> command_buffer, view<buffer> src, rt_buffer_range src_range, view<buffer> dst, rt_buffer_range dst_range) {
+		rtCmdBufferCopy(command_buffer, src, src_range, dst, dst_range);
+		detail::check_rutile_error("failed to copy buffer");
+	}
+
 	void BufferBarrier(view<command_buffer> command_buffer, view<buffer> buffer, rt_buffer_range range, access src, access dst) {
 		rtCmdBufferBarrier(command_buffer, buffer, range, { static_cast<rt_stage_flag>(src.stage), static_cast<rt_access_type>(src.type) }, { static_cast<rt_stage_flag>(dst.stage), static_cast<rt_access_type>(dst.type) });
 		detail::check_rutile_error("failed to transition buffer");

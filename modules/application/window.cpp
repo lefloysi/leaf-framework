@@ -1,4 +1,5 @@
 #include "leaf/application/window.hpp"
+#include <leaf/core/profiler.hpp>
 
 #include "leaf/core/exception.hpp"
 #include "leaf/core/format.hpp"
@@ -171,6 +172,7 @@ namespace lf {
 	}
 
 	rt::view<rt::command_buffer> Window::begin_frame() {
+		LF_PROFILE_SCOPE("frame.acquire-and-reset");
 		discard_frame();
 		if (!drawable()) { return {}; }
 		const dim2<u32> actual_framebuffer_size = platform_framebuffer_size(platform);
@@ -212,10 +214,16 @@ namespace lf {
 		}
 		rt::Cmd::EndRendering(frame_command_buffer);
 		rt::Cmd::End(frame_command_buffer);
-		frame_rendered = rt::Queue::Submit(queue, frame_command_buffer);
+		{
+			LF_PROFILE_SCOPE("frame.submit-native");
+			frame_rendered = rt::Queue::Submit(queue, frame_command_buffer);
+		}
 		frame_submitted = true;
 		asset::submitted(frame_rendered);
-		rt::Swapchain::Present(swapchain, frame_rendered);
+		{
+			LF_PROFILE_SCOPE("frame.present");
+			rt::Swapchain::Present(swapchain, frame_rendered);
+		}
 		frame_buffer = {};
 		frame_rendered = {};
 		frame_submitted = false;

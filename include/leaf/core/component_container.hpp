@@ -182,6 +182,17 @@ namespace lf {
 			(std::get<component_index<Component>>(components).second.emplace_back(), ...);
 		}
 
+		template<typename... Previous>
+		explicit component_container(component_container<Handle, Previous...>&& previous) : component_container() {
+			static_assert(((component_index<Previous> < sizeof...(Component)) && ...));
+			slots.resize(previous.slots.size());
+			for (usize index = 0; index < slots.size(); ++index) {
+				((slots[index].components[component_index<Previous>] = previous.slots[index].components[component_container<Handle, Previous...>::template component_index<Previous>]), ...);
+			}
+			free = std::move(previous.free);
+			((std::get<component_index<Previous>>(components) = std::move(std::get<component_container<Handle, Previous...>::template component_index<Previous>>(previous.components))), ...);
+		}
+
 		entity create(bundle bundle = {}) {
 			size_t index;
 			if (free.empty()) {
@@ -326,6 +337,8 @@ namespace lf {
 			}
 			return matches.size();
 		}();
+		template<instantiation_of<identifier> OtherHandle, typename... OtherComponent>
+		friend class component_container;
 
 		vector<slot> slots;
 		vector<size_t> free;

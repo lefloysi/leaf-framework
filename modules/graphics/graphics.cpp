@@ -127,12 +127,9 @@ namespace rt {
 			return err;
 		}
 		lf::log::Debug("[leaf] Graphics init for '{}'", graphics_api);
-		{
-			const char* layers[] = { "rt-validation-layer" };
-			if (rtLoad(graphics_api.data(), layers, std::size(layers))) {
-				lf::log::Error("[leaf] Failed to load graphics backend '{}'", graphics_api);
-				return error(generic_errc::unknown, "rtLoad failed");
-			}
+		if (rtLoad(graphics_api.data(), nullptr, 0)) {
+			lf::log::Error("[leaf] Failed to load graphics backend '{}'", graphics_api);
+			return error(generic_errc::unknown, "rtLoad failed");
 		}
 
 		lf::log::Debug("[leaf] Loaded graphics backend '{}'", graphics_api);

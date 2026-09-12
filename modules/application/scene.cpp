@@ -1,4 +1,5 @@
 #include "leaf/application/scene.hpp"
+#include <leaf/core/profiler.hpp>
 #include "application/rml/backend.hpp"
 
 #include <leaf/core/exception.hpp>
@@ -426,6 +427,7 @@ namespace lf {
 	}
 
 	rt::view<rt::command_buffer> Scene::record(rt::view<rt::command_buffer> commands) {
+		LF_PROFILE_SCOPE("frame.record-ui");
 		const dim2<u32> size = display.size();
 		if (context->GetDimensions() != Rml::Vector2i{ static_cast<i32>(size.width), static_cast<i32>(size.height) }) {
 			context->SetDimensions({ static_cast<i32>(size.width), static_cast<i32>(size.height) });

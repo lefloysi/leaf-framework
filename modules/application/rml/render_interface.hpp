@@ -41,6 +41,7 @@ namespace lf {
 			pos2<f32> position;
 			pos2<f32> uv;
 			f32 color[4];
+			bool operator==(const UiVertex& other) const;
 		};
 
 		inline static const rt::vertex_input vertex_input = rt::vertex_input::Make<UiVertex>(
@@ -99,8 +100,12 @@ namespace lf {
 		vector<QueuedGeometry> queued_geometry;
 		vector<UiVertex> batch_vertices;
 		usize batch_vertex_buffer_index = 0;
-		vector<rt::unique<rt::buffer>> batch_vertex_buffers;
-		vector<u64> batch_vertex_buffer_sizes;
+		struct Batch {
+			rt::unique<rt::buffer> buffer;
+			u64 capacity = 0;
+			vector<UiVertex> vertices;
+		};
+		vector<Batch> batches;
 	};
 
 } // namespace lf

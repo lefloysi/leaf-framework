@@ -643,12 +643,13 @@ namespace lf::bin {
 					} else {
 						return stream(lf::schema<Version>(field.value));
 					}
+				} else {
+					const lf::version source = lf::schema_version<Version>::value;
+					if (auto err = detail::source_schema<Version>(stream, field.value, source, args...); err) {
+						return err;
+					}
+					return lf::migrate<Version>(field.value, source);
 				}
-				const lf::version source = lf::schema_version<Version>::value;
-				if (auto err = detail::source_schema<Version>(stream, field.value, source, args...); err) {
-					return err;
-				}
-				return lf::migrate<Version>(field.value, source);
 			}, field.args);
 		};
 		if constexpr (std::derived_from<std::remove_cvref_t<Value>, reference>) {
