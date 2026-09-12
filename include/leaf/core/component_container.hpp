@@ -306,6 +306,11 @@ namespace lf {
 			(function.template operator()<Component>(), ...);
 		}
 
+		template<typename Function>
+		void each_component(Function&& function) const {
+			(function.template operator()<Component>(), ...);
+		}
+
 		template<typename T>
 		void erase(Handle value) {
 			size_t index = slots[usize(value)].components[component_index<T>];

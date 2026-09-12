@@ -4,6 +4,7 @@
 #include "leaf/core/concepts.hpp"
 #include "leaf/core/distance.hpp"
 #include "leaf/core/normalized.hpp"
+#include "leaf/core/math/pos.hpp"
 #include "leaf/core/error.hpp"
 #include "leaf/core/exception.hpp"
 #include "leaf/core/schema.hpp"
@@ -536,6 +537,22 @@ namespace lf {
 				return obj.get<list>();
 			}
 			throw runtime_exception(lf::format("cannot convert type '{}' to list", obj.current_type_name()));
+		}
+	};
+	template<typename T, glm::qualifier Qualifier>
+	struct object_trait<glm::vec<2, T, Qualifier>> {
+		static glm::vec<2, T, Qualifier> parse(const object& obj) {
+			glm::vec<2, T, Qualifier> result{};
+			object_trait<dict>::parse(obj).assign(group(field("x", result.x), field("y", result.y)));
+			return result;
+		}
+	};
+	template<typename T>
+	struct object_trait<pos2<T>> {
+		static pos2<T> parse(const object& obj) {
+			pos2<T> result{};
+			object_trait<dict>::parse(obj).assign(group(field("x", result.x), field("y", result.y)));
+			return result;
 		}
 	};
 	template<typename T>

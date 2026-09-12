@@ -354,6 +354,8 @@ namespace lf::bin {
 	error process(Stream& stream, identifier& value);
 	template<byte_stream Stream, specialization_of<unit> unit>
 	error process(Stream& stream, unit& value);
+	template<byte_stream Stream, specialization_of<normalized> Value>
+	error process(Stream& stream, Value& value);
 	template<byte_stream Stream, specialization_of<pos2> pos2>
 	error process(Stream& stream, pos2& value);
 	template<byte_stream Stream, specialization_of<dim2> dim2>
@@ -1142,6 +1144,13 @@ namespace lf::bin {
 	}
 	template<byte_stream Stream, specialization_of<unit> unit>
 	error process(Stream& stream, unit& value) { return process(stream, value.value); }
+	template<byte_stream Stream, specialization_of<normalized> Value>
+	error process(Stream& stream, Value& value) {
+		auto raw = value.raw();
+		if (auto error = process(stream, raw)) { return error; }
+		if constexpr (readable_byte_stream<Stream>) { value = std::remove_cvref_t<Value>{ raw }; }
+		return {};
+	}
 	template<byte_stream Stream, specialization_of<pos2> pos2>
 	error process(Stream& stream, pos2& value) { return stream(lf::field("x", value.x), lf::field("y", value.y)); }
 	template<byte_stream Stream, specialization_of<dim2> dim2>
