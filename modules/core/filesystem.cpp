@@ -1,4 +1,5 @@
 #include "leaf/core/filesystem.hpp"
+#include <mutex>
 
 #include "leaf/core/singleton.hpp"
 

@@ -3,6 +3,7 @@
 #include "leaf/core/filesystem.hpp"
 #include "leaf/core/format.hpp"
 #include "leaf/core/logging.hpp"
+#include "leaf/core/profiler.hpp"
 #include "leaf/core/scope.hpp"
 #include "leaf/graphics/buffer.hpp"
 #include "leaf/graphics/command_buffer.hpp"
@@ -65,6 +66,7 @@ namespace lf {
 		return draw_commands;
 	}
 	Rml::CompiledGeometryHandle Renderer::CompileGeometry(Rml::Span<const Rml::Vertex> vertices, Rml::Span<const int> indices) {
+		LF_PROFILE_SCOPE("ui.compile-geometry");
 		auto geometry = make_unique<Geometry>();
 		vector<UiVertex> flattened;
 		flattened.reserve(indices.size());
@@ -236,6 +238,7 @@ namespace lf {
 		queued_geometry.clear();
 	}
 	void Renderer::draw_batch(const vector<UiVertex>& vertices, TextureData* texture_data, pos2<u32> scissor_position, dim2<u32> scissor_size) {
+		LF_PROFILE_SCOPE("ui.draw-batch");
 		if (vertices.empty() || !texture_data) {
 			return;
 		}

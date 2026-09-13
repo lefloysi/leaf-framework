@@ -1100,6 +1100,12 @@ end
 		return string();
 	}
 
+	error SaveInputSetting(string_view mod_name, string_view action, string_view key) {
+        const string mod_key(mod_name.empty() ? "core" : mod_name);
+        detail::loaded_settings[mod_key].input[string(action)] = string(key);
+        return detail::write_mod_settings(mod_key);
+    }
+
 	error EnsureInputSetting(string_view mod_name, string_view action, string_view key) {
 		const string mod_key(mod_name.empty() ? "core" : mod_name);
 		detail::loaded_settings[mod_key].input.try_emplace(string(action), string(key));

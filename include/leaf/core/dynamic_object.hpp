@@ -5,6 +5,7 @@
 #include "leaf/core/distance.hpp"
 #include "leaf/core/normalized.hpp"
 #include "leaf/core/math/pos.hpp"
+#include "leaf/core/math/dim.hpp"
 #include "leaf/core/error.hpp"
 #include "leaf/core/exception.hpp"
 #include "leaf/core/schema.hpp"
@@ -140,7 +141,7 @@ namespace lf {
 				data.assign(schema(value));
 				return value;
 			} else if constexpr (requires(const dict& data) { T{ data }; }) {
-				return T{ object_trait<dict>::parse(obj) };
+				return T{ obj.parse<dict>() };
 			} else {
 				static_assert(dependent_false<T>, "no object trait parser for this type");
 			}
@@ -552,6 +553,14 @@ namespace lf {
 		static pos2<T> parse(const object& obj) {
 			pos2<T> result{};
 			object_trait<dict>::parse(obj).assign(group(field("x", result.x), field("y", result.y)));
+			return result;
+		}
+	};
+	template<typename T>
+	struct object_trait<dim2<T>> {
+		static dim2<T> parse(const object& obj) {
+			dim2<T> result{};
+			object_trait<dict>::parse(obj).assign(group(field("width", result.width), field("height", result.height)));
 			return result;
 		}
 	};

@@ -1109,7 +1109,7 @@ namespace lf::bin {
 			if (id == 0) {
 				value.state = nullptr;
 			} else {
-				stream.refs().defer<element>(&value, id);
+				stream.refs().template defer<element>(&value, id);
 			}
 		}
 		return {};

@@ -27,6 +27,8 @@ namespace lf {
 		u32 padding = 2;
 		u32 max_frame_extent = 256;
 		optional<Progress> progress;
+		bool smooth = false;
+		u32 mip_levels = 1;
 	};
 
 	struct texture_atlas {

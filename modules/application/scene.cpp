@@ -162,18 +162,17 @@ namespace lf {
 				"set_attribute", &SceneElement::set_attribute,
 				"remove_attribute", &SceneElement::remove_attribute
 			);
-			sol::table window = lua.create_table_with(
-				"set_title", [&scene](string_view title) { scene.window().set_title(title); },
-				"set_fullscreen", [&scene](bool enabled) { scene.window().set_fullscreen(enabled); },
-				"get_fullscreen", [&scene] { return scene.window().fullscreen(); },
-				"set_vsync", [&scene](bool enabled) { scene.window().set_vsync(enabled); },
-				"close", [&scene] { scene.window().set_should_close(true); }
-			);
-			lua["scene"] = lua.create_table_with(
-				"document", [&scene](string_view id) { return SceneElement{ scene, id }; },
-				"escape", [](string_view text) { return Rml::StringUtilities::EncodeRml(Rml::String{ text }); },
-				"window", window
-			);
+			sol::table window = lua.create_table();
+			window.set_function("set_title", [&scene](string_view title) { scene.window().set_title(title); });
+			window.set_function("set_fullscreen", [&scene](bool enabled) { scene.window().set_fullscreen(enabled); });
+			window.set_function("get_fullscreen", [&scene] { return scene.window().fullscreen(); });
+			window.set_function("set_vsync", [&scene](bool enabled) { scene.window().set_vsync(enabled); });
+			window.set_function("close", [&scene] { scene.window().set_should_close(true); });
+
+			sol::table interface = lua.create_named_table("scene");
+			interface.set_function("document", [&scene](string_view id) { return SceneElement{ scene, id }; });
+			interface.set_function("escape", [](string_view text) { return Rml::StringUtilities::EncodeRml(Rml::String{ text }); });
+			interface["window"] = window;
 			return {};
 		}
 
@@ -432,10 +431,22 @@ namespace lf {
 		if (context->GetDimensions() != Rml::Vector2i{ static_cast<i32>(size.width), static_cast<i32>(size.height) }) {
 			context->SetDimensions({ static_cast<i32>(size.width), static_cast<i32>(size.height) });
 		}
-		context->Update();
-		rml_backend->renderer.begin(commands, size);
-		context->Render();
-		rml_backend->renderer.end();
+		{
+			LF_PROFILE_SCOPE("ui.context-update");
+			context->Update();
+		}
+		{
+			LF_PROFILE_SCOPE("ui.renderer-begin");
+			rml_backend->renderer.begin(commands, size);
+		}
+		{
+			LF_PROFILE_SCOPE("ui.context-render");
+			context->Render();
+		}
+		{
+			LF_PROFILE_SCOPE("ui.renderer-end");
+			rml_backend->renderer.end();
+		}
 
 		return rml_backend->renderer.commands();
 	}

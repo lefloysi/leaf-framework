@@ -229,7 +229,7 @@ namespace lf {
 	}
 
 	texture_atlas build_texture_atlas(rt::view<rt::queue> queue, span<const atlas_source_frame> source_frames, texture_atlas_options setup) {
-		texture_atlas_options options{ .padding = setup.padding, .max_frame_extent = setup.max_frame_extent };
+		texture_atlas_options options{ .padding = setup.padding, .max_frame_extent = setup.max_frame_extent, .smooth = setup.smooth, .mip_levels = setup.mip_levels };
 		if (setup.progress) {
 			setup.progress->add("inspect");
 			setup.progress->add("pack");
@@ -349,10 +349,32 @@ namespace lf {
 
 		if (setup.progress) { options.progress.emplace((*setup.progress)()); }
 		atlas.atlas_texture = rt::unique{ rt::Texture::Create() };
-		rt::Texture::Resize(atlas.atlas_texture, rt::texture_type::d2, rt::format::rgba8_unorm, { layout.width, layout.height, 1 });
+		// Keep at least one padding texel at the coarsest atlas level.
+		u32 levels = 1;
+		while (levels < options.mip_levels && (1u << levels) <= options.padding && (layout.width >> levels) && (layout.height >> levels)) { ++levels; }
+		rt::Texture::Resize(atlas.atlas_texture, rt::texture_type::d2, rt::format::rgba8_unorm, { layout.width, layout.height, 1 }, levels);
 		rt::unique<rt::command_buffer> upload_commands(rt::CommandBuffer::Create());
 		rt::Cmd::Begin(upload_commands);
 		rt::Cmd::TextureData(upload_commands, atlas.atlas_texture, { rt::texture_aspect_flag::color, 0, 1, 0, 1, { layout.width, layout.height, 1 }, {} }, atlas_pixels.data());
+		u32 mip_width = layout.width, mip_height = layout.height;
+		for (u32 level = 1; level < levels; ++level) {
+			const u32 next_width = std::max(1u,mip_width / 2), next_height = std::max(1u,mip_height / 2);
+			decltype(atlas_pixels) next;
+			next.resize(usize(next_width) * next_height * 4);
+			for (u32 y = 0; y < next_height; ++y) {
+				for (u32 x = 0; x < next_width; ++x) {
+					for (u32 channel = 0; channel < 4; ++channel) {
+						u32 sum = 0;
+						for (u32 dy = 0; dy < 2; ++dy) { for (u32 dx = 0; dx < 2; ++dx) {
+							sum += atlas_pixels[(usize(std::min(mip_height-1,y*2+dy))*mip_width + std::min(mip_width-1,x*2+dx))*4+channel];
+						} }
+						next[(usize(y)*next_width+x)*4+channel] = static_cast<u08>((sum+2)/4);
+					}
+				}
+			}
+			atlas_pixels = std::move(next); mip_width = next_width; mip_height = next_height;
+			rt::Cmd::TextureData(upload_commands, atlas.atlas_texture, {rt::texture_aspect_flag::color,level,1,0,1,{mip_width,mip_height,1},{}},atlas_pixels.data());
+		}
 		rt::Cmd::End(upload_commands);
 		rt::Timepoint::Wait(rt::Queue::Submit(queue, upload_commands));
 		const auto upload_done = std::chrono::steady_clock::now();
@@ -364,7 +386,7 @@ namespace lf {
 
 		atlas.view = rt::unique(rt::TextureView::CreateFromTexture(atlas.atlas_texture));
 		atlas.sampler = rt::unique(rt::Sampler::Create());
-		rt::Sampler::SetFilter(atlas.sampler, rt::filter::nearest, rt::filter::nearest, rt::mip_filter::none);
+		rt::Sampler::SetFilter(atlas.sampler, options.smooth ? rt::filter::linear : rt::filter::nearest, options.smooth ? rt::filter::linear : rt::filter::nearest, levels > 1 ? rt::mip_filter::linear : rt::mip_filter::none);
 		rt::Sampler::SetAddress(atlas.sampler, rt::address_mode::clamp, rt::address_mode::clamp, rt::address_mode::clamp);
 		const auto view_done = std::chrono::steady_clock::now();
 		log::Info("[textures] atlas view/finalize: {:.3f}s, total {:.3f}s", std::chrono::duration<f64>(view_done - upload_done).count(), std::chrono::duration<f64>(view_done - build_start).count());
