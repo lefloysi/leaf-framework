@@ -8,6 +8,8 @@
 #include <RmlUi/Core/EventListener.h>
 #include <RmlUi/Core/ObserverPtr.h>
 
+#include <functional>
+
 namespace Rml {
 	class Context;
 	class Element;
@@ -18,6 +20,11 @@ namespace Rml {
 namespace lf {
 	class Scene final : private Rml::EventListener {
 	  public:
+		struct RecordedContent {
+			rt::view<rt::command_buffer> content;
+			rt::view<rt::command_buffer> interface;
+		};
+
 		explicit Scene(Window& window);
 		~Scene();
 
@@ -26,6 +33,7 @@ namespace lf {
 		bool update(span<const input_event> events);
 		void render();
 		rt::view<rt::command_buffer> record(rt::view<rt::command_buffer> uploads);
+		RecordedContent record(rt::view<rt::command_buffer> uploads, const std::function<void()>& content);
 		void set_rml(string_view source);
 		void set_rml(const char* source, usize size) {
 			set_rml(string_view(source, size));

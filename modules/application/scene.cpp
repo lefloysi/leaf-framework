@@ -451,6 +451,29 @@ namespace lf {
 		return rml_backend->renderer.commands();
 	}
 
+	Scene::RecordedContent Scene::record(rt::view<rt::command_buffer> commands, const std::function<void()>& content) {
+		LF_PROFILE_SCOPE("frame.record-segmented-ui");
+		const dim2<u32> size = display.size();
+		if (context->GetDimensions() != Rml::Vector2i{ static_cast<i32>(size.width), static_cast<i32>(size.height) }) {
+			context->SetDimensions({ static_cast<i32>(size.width), static_cast<i32>(size.height) });
+		}
+		{
+			LF_PROFILE_SCOPE("ui.context-update");
+			context->Update();
+		}
+		rml_backend->renderer.begin(commands, size);
+		content();
+		RecordedContent recorded;
+		recorded.content = rml_backend->renderer.checkpoint();
+		{
+			LF_PROFILE_SCOPE("ui.context-render");
+			context->Render();
+		}
+		rml_backend->renderer.end();
+		recorded.interface = rml_backend->renderer.interface_commands();
+		return recorded;
+	}
+
 	bool Scene::update() {
 		const auto events = display.input_events();
 		return update(events);

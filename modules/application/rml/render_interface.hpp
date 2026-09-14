@@ -25,8 +25,10 @@ namespace lf {
 		Renderer();
 
 		void begin(rt::view<rt::command_buffer> upload_commands, dim2<u32> viewport_size);
+		rt::view<rt::command_buffer> checkpoint();
 		void end();
 		rt::view<rt::command_buffer> commands() const;
+		rt::view<rt::command_buffer> interface_commands() const;
 		Rml::CompiledGeometryHandle CompileGeometry(Rml::Span<const Rml::Vertex> vertices, Rml::Span<const int> indices) override;
 		void RenderGeometry(Rml::CompiledGeometryHandle geometry, Rml::Vector2f translation, Rml::TextureHandle texture) override;
 		void ReleaseGeometry(Rml::CompiledGeometryHandle geometry) override;
@@ -79,6 +81,7 @@ namespace lf {
 		void draw_batch(const vector<UiVertex>& vertices, TextureData* texture, pos2<u32> scissor_position, dim2<u32> scissor_size);
 
 		rt::unique<rt::command_buffer> draw_commands;
+		rt::unique<rt::command_buffer> interface_draw_commands;
 		rt::view<rt::command_buffer> frame_upload_commands;
 		rt::view<rt::command_buffer> current_command_buffer;
 		dim2<u32> current_framebuffer_size{};

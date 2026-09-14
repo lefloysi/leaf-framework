@@ -29,6 +29,7 @@ namespace lf {
 
 	Renderer::Renderer() {
 		draw_commands = rt::unique(rt::CommandBuffer::Create());
+		interface_draw_commands = rt::unique(rt::CommandBuffer::Create());
 		program = rt::unique(rt::Program::Create());
 		rt::Program::Source(program, "rml", leaf_application_shader);
 		const rt::vertex_layout layout = rt::vertex_layout::Make({ &vertex_input, 1 });
@@ -56,14 +57,27 @@ namespace lf {
 		upload_textures();
 		current_command_buffer = draw_commands;
 	}
-	void Renderer::end() {
+	rt::view<rt::command_buffer> Renderer::checkpoint() {
 		flush_queued_geometry();
 		rt::Cmd::End(draw_commands);
+
+		rt::Cmd::Reset(interface_draw_commands);
+		rt::Cmd::ContinueRendering(interface_draw_commands);
+		current_command_buffer = interface_draw_commands;
+		bound_texture = nullptr;
+		return draw_commands;
+	}
+	void Renderer::end() {
+		flush_queued_geometry();
+		rt::Cmd::End(current_command_buffer);
 		frame_upload_commands = {};
 		current_command_buffer = {};
 	}
 	rt::view<rt::command_buffer> Renderer::commands() const {
 		return draw_commands;
+	}
+	rt::view<rt::command_buffer> Renderer::interface_commands() const {
+		return interface_draw_commands;
 	}
 	Rml::CompiledGeometryHandle Renderer::CompileGeometry(Rml::Span<const Rml::Vertex> vertices, Rml::Span<const int> indices) {
 		LF_PROFILE_SCOPE("ui.compile-geometry");

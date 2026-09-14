@@ -3,6 +3,7 @@ find_package(CLI11 CONFIG REQUIRED)
 add_library("leaf-graphics" STATIC
 	"buffer.cpp"
 	"command_buffer.cpp"
+	"framebuffer.cpp"
     "graphics.cpp"
 	"graphics_program.cpp"
 	"queue.cpp"
