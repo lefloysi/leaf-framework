@@ -20,6 +20,7 @@
 #include <RmlUi/Core/Factory.h>
 #include <RmlUi/Core/Input.h>
 #include <RmlUi/Core/StringUtilities.h>
+#include <RmlUi/Core/RenderManager.h>
 
 namespace lf {
 	namespace {
@@ -452,6 +453,10 @@ namespace lf {
 	}
 
 	Scene::RecordedContent Scene::record(rt::view<rt::command_buffer> commands, const std::function<void()>& content) {
+		return record(commands, content, {});
+	}
+
+	Scene::RecordedContent Scene::record(rt::view<rt::command_buffer> commands, const std::function<void()>& content, const std::function<void()>& interface) {
 		LF_PROFILE_SCOPE("frame.record-segmented-ui");
 		const dim2<u32> size = display.size();
 		if (context->GetDimensions() != Rml::Vector2i{ static_cast<i32>(size.width), static_cast<i32>(size.height) }) {
@@ -462,12 +467,16 @@ namespace lf {
 			context->Update();
 		}
 		rml_backend->renderer.begin(commands, size);
+		context->GetRenderManager().PrepareRender({ static_cast<i32>(size.width), static_cast<i32>(size.height) });
 		content();
 		RecordedContent recorded;
 		recorded.content = rml_backend->renderer.checkpoint();
 		{
 			LF_PROFILE_SCOPE("ui.context-render");
 			context->Render();
+		}
+		if (interface) {
+			interface();
 		}
 		rml_backend->renderer.end();
 		recorded.interface = rml_backend->renderer.interface_commands();

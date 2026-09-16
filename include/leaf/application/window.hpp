@@ -279,7 +279,7 @@ namespace lf {
 		void submit(rt::view<rt::command_buffer> commands);
 		rt::view<rt::command_buffer> begin_frame();
 		void begin_rendering();
-		void end_frame();
+		rt::timepoint end_frame();
 
 		void on_control(input_control control, bool down, input_modifiers modifiers);
 		void on_text(u32 character);

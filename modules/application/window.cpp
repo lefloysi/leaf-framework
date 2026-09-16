@@ -208,9 +208,9 @@ namespace lf {
 		rt::Cmd::SetViewport(frame_command_buffer, 0, 0, framebuffer_size.width, framebuffer_size.height, 0.0f, 1.0f);
 		rt::Cmd::SetScissor(frame_command_buffer, 0, 0, framebuffer_size.width, framebuffer_size.height);
 	}
-	void Window::end_frame() {
+	rt::timepoint Window::end_frame() {
 		if (!frame_buffer) {
-			return;
+			return {};
 		}
 		rt::Cmd::EndRendering(frame_command_buffer);
 		rt::Cmd::End(frame_command_buffer);
@@ -224,9 +224,11 @@ namespace lf {
 			LF_PROFILE_SCOPE("frame.present");
 			rt::Swapchain::Present(swapchain, frame_rendered);
 		}
+		const auto completion = frame_rendered;
 		frame_buffer = {};
 		frame_rendered = {};
 		frame_submitted = false;
+		return completion;
 	}
 
 	void Window::on_control(input_control control, bool down, input_modifiers next_modifiers) {
