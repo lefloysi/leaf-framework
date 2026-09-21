@@ -4,6 +4,7 @@
 #include "leaf/core/format.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <cctype>
 #include <charconv>
 #include <limits>
@@ -278,6 +279,54 @@ namespace lf {
 		return fixed::from_raw(*raw);
 	}
 
+	report<fixed> fixed::checked_mul_div(fixed multiplier, fixed divisor) const {
+		if (divisor.raw_value == 0) { return unexpected(error(generic_errc::arithmetic_error, "fixed division by zero")); }
+#if defined(__SIZEOF_INT128__)
+		const __int128 quotient = (static_cast<__int128>(raw_value) * static_cast<__int128>(multiplier.raw_value)) / static_cast<__int128>(divisor.raw_value);
+		if (quotient > std::numeric_limits<i64>::max() || quotient < std::numeric_limits<i64>::min()) {
+			return unexpected(error(generic_errc::arithmetic_error, "fixed multiply-divide overflow"));
+		}
+		return fixed::from_raw(static_cast<i64>(quotient));
+#elif defined(_MSC_VER)
+		const bool negative = ((raw_value < 0) != (multiplier.raw_value < 0)) != (divisor.raw_value < 0);
+		u64 high = 0;
+		const u64 low = _umul128(sign_magnitude(raw_value), sign_magnitude(multiplier.raw_value), &high);
+		const auto raw = divide_unsigned_128(high, low, sign_magnitude(divisor.raw_value), negative, "fixed multiply-divide overflow");
+		if (!raw) { return unexpected(raw.error()); }
+		return fixed::from_raw(*raw);
+#endif
+	}
+
+	fixed fixed::mul_div(fixed multiplier, fixed divisor) const {
+		const auto result = checked_mul_div(multiplier, divisor);
+		if (!result) { throw runtime_exception(lf::format("{}: {} * {} / {}", result.error().message, to_string(), multiplier.to_string(), divisor.to_string())); }
+		return *result;
+	}
+
+	report<fixed> fixed::checked_sqrt() const {
+		if (raw_value < 0) {
+			return unexpected(error(generic_errc::arithmetic_error, "fixed square root of negative value"));
+		}
+		if (raw_value == 0) { return fixed{}; }
+		// Newton's integer square root of raw_value * scale. scaled_divide
+		// already performs the intermediate multiplication at 128-bit width.
+		const auto bits = std::bit_width(static_cast<u64>(raw_value)) + std::bit_width(static_cast<u64>(scale));
+		i64 estimate = i64(1) << ((bits + 1) / 2);
+		for (;;) {
+			const auto quotient = scaled_divide(raw_value, estimate);
+			if (!quotient) { return unexpected(quotient.error()); }
+			const auto next = (estimate + *quotient) / 2;
+			if (next >= estimate) { return fixed::from_raw(estimate); }
+			estimate = next;
+		}
+	}
+
+	fixed fixed::sqrt() const {
+		const auto result = checked_sqrt();
+		if (!result) { throw runtime_exception(result.error().message); }
+		return *result;
+	}
+
 	fixed fixed::operator-() const {
 		report<fixed> result = checked_negated();
 		if (!result) {
@@ -305,7 +354,7 @@ namespace lf {
 	fixed fixed::operator*(fixed other) const {
 		report<fixed> result = checked_multiply(other);
 		if (!result) {
-			throw runtime_exception(result.error().message);
+			throw runtime_exception(lf::format("{}: {} * {}", result.error().message, to_string(), other.to_string()));
 		}
 		return *result;
 	}
@@ -313,7 +362,7 @@ namespace lf {
 	fixed fixed::operator/(fixed other) const {
 		report<fixed> result = checked_divide(other);
 		if (!result) {
-			throw runtime_exception(result.error().message);
+			throw runtime_exception(lf::format("{}: {} / {}", result.error().message, to_string(), other.to_string()));
 		}
 		return *result;
 	}
