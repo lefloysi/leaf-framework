@@ -55,7 +55,11 @@ namespace lf {
 			std::apply([&]<typename... Value>(const optional<Value>&... values) {
 				([&] {
 					if (values) {
-						destination.template add<Value>(change.id, *values);
+						if (destination.template has<Value>(change.id)) {
+							*destination.template find<Value>(change.id) = *values;
+						} else {
+							destination.template add<Value>(change.id, *values);
+						}
 					} else {
 						destination.template erase<Value>(change.id);
 					}
