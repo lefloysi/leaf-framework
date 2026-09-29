@@ -15,7 +15,7 @@ namespace lf {
 		class package_decoder_backend;
 		template<typename Backend>
 		class package_decoder_backend_model;
-	}
+	} // namespace detail
 
 	/*! @brief A copyable type-erased decoder that turns a package file into an fs::volume. */
 	class package_decoder {
@@ -58,7 +58,7 @@ namespace lf {
 		  private:
 			Backend implementation;
 		};
-	}
+	} // namespace detail
 
 	template<typename Backend>
 	package_decoder::package_decoder(Backend value) : backend(std::make_shared<detail::package_decoder_backend_model<std::decay_t<Backend>>>(std::move(value))) {}

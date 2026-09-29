@@ -29,4 +29,4 @@ namespace lf {
 
 	template<typename Function>
 	void scope_exit<Function>::release() noexcept { active = false; }
-}
+} // namespace lf

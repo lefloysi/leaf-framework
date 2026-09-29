@@ -3,8 +3,8 @@
 #include <leaf/core/dynamic_object.hpp>
 #include <leaf/core/schema.hpp>
 #include <leaf/resource/database.hpp>
-#include <leaf/script/mod_loader.hpp>
 #include <leaf/resource/prototype.hpp>
+#include <leaf/script/mod_loader.hpp>
 #include <leaf/script/prototype.hpp>
 #include <leaf/script/state.hpp>
 

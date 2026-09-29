@@ -1,13 +1,13 @@
 #pragma once
 
-#include "leaf/core/span.hpp"
+#include "leaf/core/math/rect.hpp"
 #include "leaf/core/optional.hpp"
 #include "leaf/core/progress.hpp"
+#include "leaf/core/span.hpp"
 #include "leaf/core/string.hpp"
 #include "leaf/core/types.hpp"
 #include "leaf/core/vector.hpp"
 #include "leaf/graphics/resource.hpp"
-#include "leaf/core/math/rect.hpp"
 
 namespace lf {
 	struct atlas_source_frame {

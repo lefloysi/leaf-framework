@@ -1,8 +1,8 @@
 #pragma once
 
+#include "leaf/application/window.hpp"
 #include "leaf/core/error.hpp"
 #include "leaf/core/string.hpp"
-#include "leaf/application/window.hpp"
 #include "leaf/script/state.hpp"
 
 #include <RmlUi/Core/EventListener.h>
@@ -15,7 +15,7 @@ namespace Rml {
 	class Element;
 	class ElementDocument;
 	class Event;
-}
+} // namespace Rml
 
 namespace lf {
 	class Scene final : private Rml::EventListener {
@@ -36,9 +36,7 @@ namespace lf {
 		RecordedContent record(rt::view<rt::command_buffer> uploads, const std::function<void()>& content);
 		RecordedContent record(rt::view<rt::command_buffer> uploads, const std::function<void()>& content, const std::function<void()>& interface);
 		void set_rml(string_view source);
-		void set_rml(const char* source, usize size) {
-			set_rml(string_view(source, size));
-		}
+		void set_rml(const char* source, usize size);
 		Rml::ElementDocument& document();
 		sol::state& script_state();
 		error execute_script(string_view source);
@@ -47,11 +45,11 @@ namespace lf {
 		const Window& window() const;
 
 		void unload_document();
+
 	  private:
 		void input(span<const input_event> events);
 		void keybinds(input_key key, bool down);
 		vector<std::pair<input_key, Rml::ObserverPtr<Rml::Element>>> held_keybinds;
-
 
 		void ProcessEvent(Rml::Event& event) override;
 
@@ -61,4 +59,3 @@ namespace lf {
 		sol::state lua = CreateState();
 	};
 } // namespace lf
-

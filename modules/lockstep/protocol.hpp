@@ -1,7 +1,7 @@
 #pragma once
 
-#include "leaf/lockstep/session.hpp"
 #include "leaf/core/exception.hpp"
+#include "leaf/lockstep/session.hpp"
 
 namespace lf::lockstep {
 	template<bin::byte_stream Stream, bin::data<Session::Input> Value>
@@ -13,14 +13,19 @@ namespace lf::lockstep {
 	error process(Stream& stream, Value& value) {
 		return stream(field("tick", value.tick), field("inputs", value.inputs));
 	}
-}
+} // namespace lf::lockstep
 
 namespace lf::lockstep::protocol {
-	enum class Type : u08 { join, welcome, snapshot_begin, snapshot, loaded, input, frame, disconnect };
+	enum class Type : u08 { join,
+							welcome,
+							snapshot_begin,
+							snapshot,
+							loaded,
+							input,
+							frame,
+							disconnect };
 
-	inline void check(error error) {
-		if (error) { throw runtime_exception(error.message); }
-	}
+	void check(error error);
 
 	template<typename... Fields>
 	void send(net::Channel& channel, Type type, Fields&&... fields) {
@@ -29,14 +34,7 @@ namespace lf::lockstep::protocol {
 		channel.send(stream.written());
 	}
 
-	inline void send_bytes(net::Channel& channel, Type type, span<const byte> bytes) {
-		bin::write_stream stream;
-		check(stream(field("type", type)));
-		check(stream.bytes(bytes.data(), bytes.size()));
-		channel.send(stream.written());
-	}
+	void send_bytes(net::Channel& channel, Type type, span<const byte> bytes);
 
-	inline bool same_peer(const net::Peer& a, const net::Peer& b) {
-		return a.id() == b.id() && a.channel() == b.channel();
-	}
-}
+	bool same_peer(const net::Peer& a, const net::Peer& b);
+} // namespace lf::lockstep::protocol

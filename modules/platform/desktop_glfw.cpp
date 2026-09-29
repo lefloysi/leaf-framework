@@ -1,9 +1,9 @@
 #include "leaf/platform/platform.hpp"
 
+#include "leaf/application/window.hpp"
 #include "leaf/core/exception.hpp"
 #include "leaf/core/logging.hpp"
 #include "leaf/graphics/resource.hpp"
-#include "leaf/application/window.hpp"
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -171,8 +171,11 @@ static void scroll_callback(GLFWwindow* wnd, double x, double y) {
 }
 
 static void close_callback(GLFWwindow* wnd) {
-	if (lf::Window* window = owner(wnd)) { window->set_should_close(true); }
-	else { glfwHideWindow(wnd); }
+	if (lf::Window* window = owner(wnd)) {
+		window->set_should_close(true);
+	} else {
+		glfwHideWindow(wnd);
+	}
 }
 
 static void focus_callback(GLFWwindow* wnd, int focused) {

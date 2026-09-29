@@ -1,7 +1,8 @@
 #include "leaf/application/scene.hpp"
-#include <leaf/core/profiler.hpp>
 #include "application/rml/backend.hpp"
+#include <leaf/core/profiler.hpp>
 
+#include <algorithm>
 #include <leaf/core/exception.hpp>
 #include <leaf/core/format.hpp>
 #include <leaf/core/logging.hpp>
@@ -10,7 +11,6 @@
 #include <leaf/graphics/command_buffer.hpp>
 #include <leaf/platform/platform.hpp>
 #include <leaf/script/settings.hpp>
-#include <algorithm>
 
 #include <RmlUi/Core/Context.h>
 #include <RmlUi/Core/Element.h>
@@ -19,8 +19,8 @@
 #include <RmlUi/Core/Event.h>
 #include <RmlUi/Core/Factory.h>
 #include <RmlUi/Core/Input.h>
-#include <RmlUi/Core/StringUtilities.h>
 #include <RmlUi/Core/RenderManager.h>
+#include <RmlUi/Core/StringUtilities.h>
 
 namespace lf {
 	namespace {
@@ -75,7 +75,7 @@ namespace lf {
 			}
 		}
 
-	}
+	} // namespace
 
 	class SceneElement final {
 	  public:
@@ -150,19 +150,7 @@ namespace lf {
 	class SceneScriptInstaller {
 		static error install(Scene& scene) {
 			sol::state& lua = scene.script_state();
-			lua.new_usertype<SceneElement>("leaf.scene_element",
-				"get_value", &SceneElement::get_value,
-				"set_value", &SceneElement::set_value,
-				"get_inner_rml", &SceneElement::get_inner_rml,
-				"set_inner_rml", &SceneElement::set_inner_rml,
-				"set_text", &SceneElement::set_text,
-				"get_property", &SceneElement::get_property,
-				"set_property", &SceneElement::set_property,
-				"get_attribute", &SceneElement::get_attribute,
-				"has_attribute", &SceneElement::has_attribute,
-				"set_attribute", &SceneElement::set_attribute,
-				"remove_attribute", &SceneElement::remove_attribute
-			);
+			lua.new_usertype<SceneElement>("leaf.scene_element", "get_value", &SceneElement::get_value, "set_value", &SceneElement::set_value, "get_inner_rml", &SceneElement::get_inner_rml, "set_inner_rml", &SceneElement::set_inner_rml, "set_text", &SceneElement::set_text, "get_property", &SceneElement::get_property, "set_property", &SceneElement::set_property, "get_attribute", &SceneElement::get_attribute, "has_attribute", &SceneElement::has_attribute, "set_attribute", &SceneElement::set_attribute, "remove_attribute", &SceneElement::remove_attribute);
 			sol::table window = lua.create_table();
 			window.set_function("set_title", [&scene](string_view title) { scene.window().set_title(title); });
 			window.set_function("set_fullscreen", [&scene](bool enabled) { scene.window().set_fullscreen(enabled); });
@@ -278,6 +266,10 @@ namespace lf {
 			rml_document->AddEventListener(event, this);
 		}
 		rml_document->Show();
+	}
+
+	void Scene::set_rml(const char* source, usize size) {
+		set_rml(string_view(source, size));
 	}
 
 	Rml::ElementDocument& Scene::document() {
@@ -400,7 +392,9 @@ namespace lf {
 				if (event.state == input_state::Up) {
 					context->ProcessMouseLeave();
 					if (event.type == INPUT_EVENT_FOCUS) {
-						while (!held_keybinds.empty()) { keybinds(held_keybinds.back().first, false); }
+						while (!held_keybinds.empty()) {
+							keybinds(held_keybinds.back().first, false);
+						}
 						if (auto* focus = context->GetFocusElement()) { focus->DispatchEvent("blur", {}); }
 					}
 				}
@@ -500,5 +494,3 @@ namespace lf {
 		rml_document = nullptr;
 	}
 } // namespace lf
-
-

@@ -24,7 +24,7 @@ extern "C" const rt::program_bytes leaf_application_shader;
 namespace lf {
 	bool Renderer::UiVertex::operator==(const UiVertex& other) const {
 		return position.x == other.position.x && position.y == other.position.y &&
-			uv.x == other.uv.x && uv.y == other.uv.y && std::ranges::equal(color, other.color);
+			   uv.x == other.uv.x && uv.y == other.uv.y && std::ranges::equal(color, other.color);
 	}
 
 	Renderer::Renderer() {

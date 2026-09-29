@@ -19,7 +19,9 @@
 namespace lf {
 	enum class generic_errc : i32;
 	enum class graphics_errc : i32;
-	namespace fs { enum class error_code : i32; }
+	namespace fs {
+		enum class error_code : i32;
+	}
 } // namespace lf
 template<>
 struct std::is_error_code_enum<lf::generic_errc> : std::true_type {};

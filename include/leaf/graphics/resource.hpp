@@ -4,12 +4,12 @@
 #include <leaf/core/error.hpp>
 #include <leaf/core/filesystem.hpp>
 #include <leaf/core/logging.hpp>
+#include <leaf/core/math/dim.hpp>
+#include <leaf/core/math/pos.hpp>
 #include <leaf/core/span.hpp>
 #include <leaf/core/string.hpp>
 #include <leaf/core/types.hpp>
 #include <leaf/core/vector.hpp>
-#include <leaf/core/math/dim.hpp>
-#include <leaf/core/math/pos.hpp>
 
 #include <leaf/graphics/enums.hpp>
 
@@ -329,24 +329,9 @@ namespace rt {
 	LEAF_RESOURCE_TRAITS(command_buffer, rt_command_buffer, rtCommandBufferDestroy);
 	LEAF_RESOURCE_TRAITS(sampler, rt_sampler, rtSamplerDestroy);
 	LEAF_RESOURCE_TRAITS(swapchain, rt_swapchain, rtSwapchainDestroy);
-
+	LEAF_RESOURCE_TRAITS(framebuffer, rt_framebuffer, rtFramebufferDestroy);
+	LEAF_RESOURCE_TRAITS(queue, rt_queue, rtQueueDestroy);	
 #undef LEAF_RESOURCE_TRAITS
-
-	template<>
-	struct resource_traits<framebuffer> {
-		using native_handle = rt_framebuffer;
-		static void destroy(native_handle handle) {
-			rtFramebufferDestroy(handle);
-		}
-	};
-
-	template<>
-	struct resource_traits<queue> {
-		using native_handle = rt_queue;
-		static void destroy(native_handle handle) {
-			rtQueueDestroy(handle);
-		}
-	};
 
 } // namespace rt
 

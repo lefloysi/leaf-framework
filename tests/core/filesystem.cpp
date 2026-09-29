@@ -1,6 +1,6 @@
 #include "leaf/core/filesystem.hpp"
-#include "leaf/core/zip.hpp"
 #include "leaf/core/scope.hpp"
+#include "leaf/core/zip.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 

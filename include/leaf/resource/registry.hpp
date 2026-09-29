@@ -1,5 +1,4 @@
 #pragma once
-#include <leaf/core/register.hpp>
 #include "leaf/core/dynamic_object.hpp"
 #include "leaf/core/exception.hpp"
 #include "leaf/core/format.hpp"
@@ -7,6 +6,7 @@
 #include "leaf/core/vector.hpp"
 #include "leaf/resource/database.hpp"
 #include "leaf/resource/prototype.hpp"
+#include <leaf/core/register.hpp>
 
 namespace lf {
 	struct PrototypeIdentity {
@@ -33,13 +33,17 @@ namespace lf {
 			using db = Database<T>;
 			static_assert(requires(T& prototype) { schema_trait<T>::get(prototype); }, "registered prototype types must provide lf::schema_trait<T>::get(T&)");
 			const auto identity = [](size_t index) {
-				const auto id = typename T::ID{index};
+				const auto id = typename T::ID{ index };
 				const T& prototype = db::get(id);
 				return PrototypeIdentity{
-					db::type(), static_cast<u64>(id.get()), db::name(id), prototype.local_name.key, prototype.local_description.key,
+					db::type(),
+					static_cast<u64>(id.get()),
+					db::name(id),
+					prototype.local_name.key,
+					prototype.local_description.key,
 				};
 			};
-			functions.push_back({&db::clear, &db::create, &db::init, &db::type, &db::count, identity, &db::load_assets});
+			functions.push_back({ &db::clear, &db::create, &db::init, &db::type, &db::count, identity, &db::load_assets });
 		}
 
 		inline static vector<PrototypeTypeFunctions> functions = {};
@@ -56,4 +60,3 @@ namespace lf {
 		return {};
 	}
 } // namespace lf
-

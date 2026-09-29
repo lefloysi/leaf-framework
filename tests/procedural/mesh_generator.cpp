@@ -1,7 +1,7 @@
 #include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <leaf/procedural/mesh_generator.hpp>
 #include <leaf/core/vector.hpp>
+#include <leaf/procedural/mesh_generator.hpp>
 #include <thread>
 
 struct alignas(128) Vertex {

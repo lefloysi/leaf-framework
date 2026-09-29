@@ -6,4 +6,3 @@ namespace lf {
 	}
 
 } // namespace lf
-

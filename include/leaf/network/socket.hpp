@@ -32,6 +32,7 @@ namespace lf::net {
 		struct Impl;
 
 	  private:
+		// i did not intentionally use pimpl here. i wouldnt use it either. ai just hasnt fixed it yet :)
 		explicit Socket(unique_ptr<Impl> impl);
 
 		unique_ptr<Impl> impl;

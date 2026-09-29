@@ -100,7 +100,8 @@ namespace lf::str {
 					if (item_presence == field_presence::present) result = field_presence::present;
 				};
 				(process_field(field), ...);
-			}, group.fields);
+			},
+					   group.fields);
 			if (presence) *presence = result;
 			return value_error;
 		}
@@ -125,7 +126,8 @@ namespace lf::str {
 			}
 			return std::apply([&](const auto&... field) {
 				return process_schema_node(source, lf::group(field...), assigned, presence);
-			}, conditional.children);
+			},
+							  conditional.children);
 		}
 
 		template<typename Condition, typename... Children>
@@ -136,7 +138,8 @@ namespace lf::str {
 			}
 			return std::apply([&](const auto&... field) {
 				return process_schema_node(source, lf::group(field...), assigned, presence);
-			}, conditional.children);
+			},
+							  conditional.children);
 		}
 
 		template<schema_value T>

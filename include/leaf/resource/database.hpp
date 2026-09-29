@@ -74,7 +74,7 @@ namespace lf {
 		if (!id || id.get() > prototypes.size()) {
 			throw runtime_exception(lf::format("{} prototype id {} is invalid", type(), id.get()));
 		}
-		return names[usize(id)];
+		return names[id];
 	}
 
 	template<typename T>

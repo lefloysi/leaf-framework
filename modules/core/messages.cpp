@@ -81,38 +81,38 @@ namespace lf {
 		}
 
 		static bool is_escaped(string_view text, size_t index) {
-				size_t slashes = 0;
-				while (index > slashes && text[index - slashes - 1] == '\\') {
-					++slashes;
-				}
-				return slashes % 2 == 1;
+			size_t slashes = 0;
+			while (index > slashes && text[index - slashes - 1] == '\\') {
+				++slashes;
 			}
+			return slashes % 2 == 1;
+		}
 
 		static void append_unescaped(string& out, string_view text) {
-				for (size_t i = 0; i < text.size(); ++i) {
-					if (text[i] == '\\' && i + 1 < text.size()) {
-						const char next = text[i + 1];
-						if (next == '{' || next == '}' || next == '|' || next == '\\') {
-							out += next;
-							++i;
-							continue;
-						}
+			for (size_t i = 0; i < text.size(); ++i) {
+				if (text[i] == '\\' && i + 1 < text.size()) {
+					const char next = text[i + 1];
+					if (next == '{' || next == '}' || next == '|' || next == '\\') {
+						out += next;
+						++i;
+						continue;
 					}
-					out += text[i];
 				}
+				out += text[i];
 			}
+		}
 
 		static void push_text_segment(vector<TextSegment>& segments, string_view text) {
-				if (text.empty()) {
-					return;
-				}
-				if (!segments.empty() && !segments.back().annotated) {
-					append_unescaped(segments.back().text, text);
-					return;
-				}
-				TextSegment segment;
-				append_unescaped(segment.text, text);
-				segments.push_back(std::move(segment));
+			if (text.empty()) {
+				return;
+			}
+			if (!segments.empty() && !segments.back().annotated) {
+				append_unescaped(segments.back().text, text);
+				return;
+			}
+			TextSegment segment;
+			append_unescaped(segment.text, text);
+			segments.push_back(std::move(segment));
 		}
 
 		vector<TextSegment> ParseAnnotatedText(string_view text) {

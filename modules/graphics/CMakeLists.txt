@@ -1,6 +1,7 @@
 find_package(CLI11 CONFIG REQUIRED)
 
 add_library("leaf-graphics" STATIC
+	"antialias.cpp"
 	"buffer.cpp"
 	"command_buffer.cpp"
 	"framebuffer.cpp"

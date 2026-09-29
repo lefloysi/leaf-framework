@@ -40,7 +40,9 @@ namespace leaf_test::binary {
 		u32 value = 0;
 	};
 
-	struct migrated_record { i64 value = 0; };
+	struct migrated_record {
+		i64 value = 0;
+	};
 
 	struct identifier_target {};
 
@@ -146,33 +148,36 @@ struct lf::schema_trait<leaf_test::binary::wrong_result_record, leaf_test::binar
 };
 
 template<>
-struct lf::schema_trait<leaf_test::binary::migrated_record, lf::version{1}> {
+struct lf::schema_trait<leaf_test::binary::migrated_record, lf::version{ 1 }> {
 	static auto get(auto& value) { return lf::group(lf::field("value", value.value)); }
 };
 
 template<>
-struct lf::schema_trait<leaf_test::binary::migrated_record, lf::version{2}> {
+struct lf::schema_trait<leaf_test::binary::migrated_record, lf::version{ 2 }> {
 	static auto get(auto& value) { return lf::group(lf::field("value", value.value)); }
 };
 
 template<>
-inline constexpr auto lf::migration_source<leaf_test::binary::migrated_record, lf::version{2}> = lf::version{1};
+inline constexpr auto lf::migration_source<leaf_test::binary::migrated_record, lf::version{ 2 }> = lf::version{ 1 };
 
 template<>
-struct lf::migrate_trait<leaf_test::binary::migrated_record, lf::version{2}> {
-	static lf::error apply(leaf_test::binary::migrated_record& value) { value.value *= 10; return {}; }
+struct lf::migrate_trait<leaf_test::binary::migrated_record, lf::version{ 2 }> {
+	static lf::error apply(leaf_test::binary::migrated_record& value) {
+		value.value *= 10;
+		return {};
+	}
 };
 
 TEST_CASE("binary runtime source version loads and migrates to the target") {
-	leaf_test::binary::migrated_record original{7};
+	leaf_test::binary::migrated_record original{ 7 };
 	lf::bin::write_stream writer;
-	REQUIRE_FALSE(writer(lf::field("record", original, lf::schema_version<lf::version{1}>{})));
+	REQUIRE_FALSE(writer(lf::field("record", original, lf::schema_version<lf::version{ 1 }>{})));
 	leaf_test::binary::migrated_record restored;
-	lf::bin::read_stream reader{writer.written()};
-	REQUIRE_FALSE(lf::bin::process(reader, restored, lf::schema_version<lf::version{2}>{}, lf::version{1}));
+	lf::bin::read_stream reader{ writer.written() };
+	REQUIRE_FALSE(lf::bin::process(reader, restored, lf::schema_version<lf::version{ 2 }>{}, lf::version{ 1 }));
 	REQUIRE(restored.value == 70);
-	lf::bin::read_stream unsupported{writer.written()};
-	REQUIRE(lf::bin::process(unsupported, restored, lf::schema_version<lf::version{2}>{}, lf::version{3}));
+	lf::bin::read_stream unsupported{ writer.written() };
+	REQUIRE(lf::bin::process(unsupported, restored, lf::schema_version<lf::version{ 2 }>{}, lf::version{ 3 }));
 }
 
 TEST_CASE("binary ordinary schemas and unique ownership round trip") {
@@ -186,7 +191,7 @@ TEST_CASE("binary ordinary schemas and unique ownership round trip") {
 }
 
 TEST_CASE("binary field errors retain their path") {
-	lf::bin::read_stream stream{{}};
+	lf::bin::read_stream stream{ {} };
 	lf::pos2<i64> value{};
 	auto error = stream(lf::field("position", value));
 	REQUIRE(error);
@@ -204,7 +209,7 @@ TEST_CASE("random seed consumes the full URBG result width") {
 }
 
 TEST_CASE("versioned binary processing uses a compatible ADL processor or schema fallback") {
-	leaf_test::binary::custom_record custom{41};
+	leaf_test::binary::custom_record custom{ 41 };
 	leaf_test::binary::version_context context;
 	lf::bin::write_stream custom_stream;
 	REQUIRE_FALSE(custom_stream(lf::field("value", custom, lf::schema_version<leaf_test::binary::schema_version>{}, context)));
@@ -212,12 +217,12 @@ TEST_CASE("versioned binary processing uses a compatible ADL processor or schema
 	REQUIRE(context.called);
 	REQUIRE(custom_bytes.size() == sizeof(u32));
 
-	leaf_test::binary::fallback_record fallback{17};
+	leaf_test::binary::fallback_record fallback{ 17 };
 	auto fallback_bytes = leaf_test::binary::write_versioned(fallback);
 	REQUIRE(fallback_bytes.has_value());
 	REQUIRE(fallback_bytes->size() == sizeof(u32));
 
-	leaf_test::binary::wrong_result_record wrong_result{23};
+	leaf_test::binary::wrong_result_record wrong_result{ 23 };
 	auto wrong_result_bytes = leaf_test::binary::write_versioned(wrong_result);
 	REQUIRE(wrong_result_bytes.has_value());
 	REQUIRE(wrong_result_bytes->size() == sizeof(u32));

@@ -12,4 +12,4 @@ namespace Rml {
 namespace lf {
 	error init_rml(span<string_view> arguments);
 	void exit_rml();
-}
+} // namespace lf

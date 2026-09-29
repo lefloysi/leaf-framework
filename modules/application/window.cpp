@@ -13,6 +13,14 @@
 #include "leaf/resource/database.hpp"
 
 namespace lf {
+	void input_modifiers::add(input_modifier modifier) {
+		value |= modifier;
+	}
+
+	bool input_modifiers::has(input_modifier modifier) const {
+		return (value & modifier) != 0;
+	}
+
 	size_t Window::control_index(input_control control) {
 		if (control.type == INPUT_CONTROL_KEY) {
 			return control.value < KEY_ENUM_MAX ? control.value : control_count;

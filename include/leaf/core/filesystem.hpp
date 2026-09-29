@@ -297,7 +297,7 @@ namespace lf::fs {
 		class file_backend_model;
 		template<typename Backend>
 		class volume_backend_model;
-	}
+	} // namespace detail
 
 	/*! @brief A move-only cursor over file content. */
 	class stream {
@@ -562,7 +562,7 @@ namespace lf::fs {
 		  private:
 			Backend implementation;
 		};
-	}
+	} // namespace detail
 
 	template<typename Backend>
 	stream::stream(Backend value) : backend(make_unique<detail::stream_backend_model<std::decay_t<Backend>>>(std::move(value))) {}
@@ -735,4 +735,3 @@ namespace lf::fs {
 		return unexpected(error(error_code::unsupported_operation, "volume cannot replace files atomically"));
 	}
 } // namespace lf::fs
-

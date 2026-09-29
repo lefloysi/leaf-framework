@@ -13,7 +13,7 @@
 #endif
 
 namespace lf {
-	instant now() {
+	timespan now() {
 #if defined(_WIN32)
 		static const i64 frequency = [] {
 			LARGE_INTEGER value;
@@ -28,13 +28,13 @@ namespace lf {
 		}
 		const i64 seconds = counter.QuadPart / frequency;
 		const i64 remainder = counter.QuadPart % frequency;
-		return instant::from_quantum(seconds * 1'000'000'000 + static_cast<i64>(static_cast<long double>(remainder) * 1'000'000'000 / frequency));
+		return timespan::from_quantum(seconds * 1'000'000'000 + static_cast<i64>(static_cast<long double>(remainder) * 1'000'000'000 / frequency));
 #else
 		timespec value{};
 		if (clock_gettime(CLOCK_MONOTONIC, &value)) {
 			throw runtime_exception("clock_gettime failed");
 		}
-		return instant::from_quantum(static_cast<i64>(value.tv_sec) * 1'000'000'000 + value.tv_nsec);
+		return timespan::from_quantum(static_cast<i64>(value.tv_sec) * 1'000'000'000 + value.tv_nsec);
 #endif
 	}
 
@@ -45,31 +45,32 @@ namespace lf {
 		ULARGE_INTEGER ticks;
 		ticks.LowPart = value.dwLowDateTime;
 		ticks.HighPart = value.dwHighDateTime;
-		return timepoint::from_unix_epoch(duration::from_quantum((static_cast<i64>(ticks.QuadPart) - 116'444'736'000'000'000) * 100));
+		return timepoint::from_unix_epoch(timespan::from_quantum((static_cast<i64>(ticks.QuadPart) - 116'444'736'000'000'000) * 100));
 #else
 		timespec value{};
 		if (clock_gettime(CLOCK_REALTIME, &value)) {
 			throw runtime_exception("clock_gettime failed");
 		}
-		return timepoint::from_unix_epoch(duration::from_quantum(static_cast<i64>(value.tv_sec) * 1'000'000'000 + value.tv_nsec));
+		return timepoint::from_unix_epoch(timespan::from_quantum(static_cast<i64>(value.tv_sec) * 1'000'000'000 + value.tv_nsec));
 #endif
 	}
 
-	duration frequency::period() const {
-		if (value.raw() <= 0) {
+	timespan frequency::period() const {
+		const i64 raw_hertz = in_hertz().quantum_count().raw();
+		if (raw_hertz <= 0) {
 			throw invalid_argument_exception("frequency must be positive to have a period");
 		}
-		return duration::from_quantum(1'000'000'000 * fixed::scale / value.raw());
+		return timespan::from_quantum(1'000'000'000 * fixed::scale / raw_hertz);
 	}
 
-	void sleep_for(duration duration) {
-		if (duration.quantum_count() <= 0) {
+	void sleep_for(timespan timespan) {
+		if (timespan.quantum_count() <= 0) {
 			return;
 		}
-		sleep_until(now() + duration);
+		sleep_until(now() + timespan);
 	}
 
-	void sleep_until(instant deadline) {
+	void sleep_until(timespan deadline) {
 		auto remaining = deadline - now();
 		if (remaining.quantum_count() <= 0) {
 			return;
@@ -112,7 +113,7 @@ namespace lf {
 #endif
 	}
 
-	string pretty_string_trait<duration>::to_string(const duration& value) {
+	string pretty_string_trait<timespan>::to_string(const timespan& value) {
 		i64 rem = value.quantum_count();
 		string result;
 		for (const auto& u : duration_units) {
@@ -130,7 +131,7 @@ namespace lf {
 		}
 		return result;
 	}
-	duration pretty_string_trait<duration>::from_string(string_view str) {
+	timespan pretty_string_trait<timespan>::from_string(string_view str) {
 		auto p = string_parser{ str };
 		i64 total_ns = 0;
 
@@ -159,6 +160,10 @@ namespace lf {
 			}
 		}
 
-		return duration::from_quantum(total_ns);
+		return timespan::from_quantum(total_ns);
+	}
+
+	timespan object_trait<timespan>::parse(const object& value) {
+		return from_pretty_string<timespan>(value.parse<string>());
 	}
 } // namespace lf

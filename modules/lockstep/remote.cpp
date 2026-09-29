@@ -1,12 +1,11 @@
-#include "protocol.hpp"
 #include "leaf/core/random.hpp"
+#include "protocol.hpp"
 #include <algorithm>
 #include <array>
 
 namespace lf::lockstep {
 	RemoteSession::RemoteSession(net::Socket socket, net::Peer host, Options options)
-		: Session(ID::null, State::connecting), socket(std::move(socket)),
-		  channel(std::move(host), random_seed() | 1), options(options) {}
+		: Session(ID::null, State::connecting), socket(std::move(socket)), channel(std::move(host), random_seed() | 1), options(options) {}
 
 	RemoteSession::~RemoteSession() = default;
 
@@ -44,32 +43,46 @@ namespace lf::lockstep {
 	void RemoteSession::receive(vector<byte> bytes) {
 		bin::read_stream stream{ bytes };
 		protocol::Type type;
-		if (stream(field("type", type))) { close(); return; }
+		if (stream(field("type", type))) {
+			close();
+			return;
+		}
 		switch (type) {
 		case protocol::Type::welcome:
 			if (status != State::logging_in || stream(field("player", owner)) || stream.remaining() || !owner) {
-				close(); return;
+				close();
+				return;
 			}
 			status = State::preparing_snapshot;
 			break;
 		case protocol::Type::snapshot_begin: {
-			if (status != State::preparing_snapshot) { close(); return; }
+			if (status != State::preparing_snapshot) {
+				close();
+				return;
+			}
 			u64 size = 0;
-			if (stream(field("tick", current_tick), field("size", size)) || stream.remaining()) { close(); return; }
+			if (stream(field("tick", current_tick), field("size", size)) || stream.remaining()) {
+				close();
+				return;
+			}
 			snapshot_size = size;
 			status = State::downloading_snapshot;
 			break;
 		}
 		case protocol::Type::snapshot:
 			if (status != State::downloading_snapshot || !snapshot_size || stream.remaining() != *snapshot_size) {
-				close(); return;
+				close();
+				return;
 			}
 			bytes.erase(bytes.begin(), bytes.end() - stream.remaining());
 			events.push_back(Event{ Event::Type::snapshot_received, owner, std::move(bytes) });
 			break;
 		case protocol::Type::frame: {
 			Frame frame;
-			if (stream(field("frame", frame)) || stream.remaining()) { close(); return; }
+			if (stream(field("frame", frame)) || stream.remaining()) {
+				close();
+				return;
+			}
 			buffered.push_back(std::move(frame));
 			break;
 		}
@@ -93,7 +106,10 @@ namespace lf::lockstep {
 	void RemoteSession::drain() {
 		if (status != State::catching_up && status != State::joined) { return; }
 		for (auto& frame : buffered) {
-			if (frame.tick != current_tick + 1) { close(); return; }
+			if (frame.tick != current_tick + 1) {
+				close();
+				return;
+			}
 			current_tick = frame.tick;
 			ready.push_back(std::move(frame));
 			status = State::joined;
@@ -112,13 +128,19 @@ namespace lf::lockstep {
 			if (!protocol::same_peer(message->first, channel.peer())) { continue; }
 			const auto packet = net::Channel::read(message->second);
 			if (!packet || packet->channel != channel.id()) { continue; }
-			if (channel.receive(*packet)) { close(); return; }
+			if (channel.receive(*packet)) {
+				close();
+				return;
+			}
 			for (auto& bytes : channel.take_messages()) {
 				receive(std::move(bytes));
 				if (status == State::disconnected) { return; }
 			}
 		}
-		if (status != State::preparing_snapshot && now() - channel.last_received() >= options.connect_timeout) { close(); return; }
+		if (status != State::preparing_snapshot && now() - channel.last_received() >= options.connect_timeout) {
+			close();
+			return;
+		}
 		channel.update(socket);
 		drain();
 	}
@@ -134,4 +156,4 @@ namespace lf::lockstep {
 		if (timeout <= 0) { return 1; }
 		return std::clamp(f64((now() - started).quantum_count()) / f64(timeout), 0.0, 1.0);
 	}
-}
+} // namespace lf::lockstep

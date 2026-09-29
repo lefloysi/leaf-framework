@@ -1,7 +1,7 @@
 #pragma once
 
-#include "leaf/core/normalized.hpp"
 #include "leaf/core/memory.hpp"
+#include "leaf/core/normalized.hpp"
 #include "leaf/core/string.hpp"
 #include "leaf/core/vector.hpp"
 

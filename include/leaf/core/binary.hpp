@@ -1,13 +1,13 @@
 #pragma once
 
-#include "leaf/core/schema.hpp"
 #include "leaf/core/array.hpp"
 #include "leaf/core/concepts.hpp"
 #include "leaf/core/error.hpp"
 #include "leaf/core/identifier.hpp"
-#include "leaf/core/optional.hpp"
 #include "leaf/core/memory.hpp"
+#include "leaf/core/optional.hpp"
 #include "leaf/core/progress.hpp"
+#include "leaf/core/schema.hpp"
 #include "leaf/core/span.hpp"
 #include "leaf/core/string.hpp"
 #include "leaf/core/types.hpp"
@@ -18,16 +18,17 @@
 #include <bit>
 #include <concepts>
 #include <cstring>
+#include <leaf/core/math/dim.hpp>
+#include <leaf/core/math/pos.hpp>
+#include <leaf/core/math/vec.hpp>
 #include <limits>
 #include <tuple>
 #include <type_traits>
 #include <utility>
-#include <leaf/core/math/dim.hpp>
-#include <leaf/core/math/pos.hpp>
-#include <leaf/core/math/vec.hpp>
 
 template<typename...>
-lf::error process(...) requires false;
+lf::error process(...)
+	requires false;
 
 namespace lf::bin {
 	struct size;
@@ -41,7 +42,8 @@ struct lf::type_name_trait<lf::bin::size> {
 namespace lf::bin {
 	using ::process;
 	template<typename Stream, typename Value, typename... Args>
-	error process(Stream&, Value&, Args&...) requires false;
+	error process(Stream&, Value&, Args&...)
+		requires false;
 
 	struct size;
 	struct read_limits;
@@ -213,7 +215,8 @@ namespace lf::bin {
 		explicit read_stream(span<const lf::byte> input, read_limits limits = {});
 		error bytes(lf::byte* output, size_t count);
 		error padding(size_t count);
-		template<schema_node... Fields> error operator()(Fields&&... fields);
+		template<schema_node... Fields>
+		error operator()(Fields&&... fields);
 		size_t cursor() const;
 		size_t remaining() const;
 		const read_limits& limits() const;
@@ -223,6 +226,7 @@ namespace lf::bin {
 		void set_progress(optional<Progress> value);
 		void add_progress_total(size_t value);
 		void advance_progress(size_t value = 1);
+
 	  private:
 		span<const lf::byte> input;
 		read_limits limits_value;
@@ -237,7 +241,8 @@ namespace lf::bin {
 		using stream_tag = write_stream_tag;
 		error bytes(const lf::byte* input, size_t count);
 		error padding(size_t count);
-		template<schema_node... Fields> error operator()(Fields&&... fields);
+		template<schema_node... Fields>
+		error operator()(Fields&&... fields);
 		const vector<lf::byte>& written() const;
 		vector<lf::byte> take_written();
 		write_refs& refs();
@@ -246,6 +251,7 @@ namespace lf::bin {
 		void set_progress(optional<Progress> value);
 		void add_progress_total(size_t value);
 		void advance_progress(size_t value = 1);
+
 	  private:
 		vector<lf::byte> output;
 		usize pending_total = 0;
@@ -261,13 +267,15 @@ namespace lf::bin {
 		span<const lf::byte> written() const;
 		error bytes(const lf::byte* input, size_t count);
 		error padding(size_t count);
-		template<schema_node... Fields> error operator()(Fields&&... fields);
+		template<schema_node... Fields>
+		error operator()(Fields&&... fields);
 		write_refs& refs();
 		const string& context() const;
 		void set_context(string value);
 		void set_progress(optional<Progress> value);
 		void add_progress_total(size_t value);
 		void advance_progress(size_t value = 1);
+
 	  private:
 		span<lf::byte> output;
 		size_t cursor_value = 0;
@@ -280,7 +288,8 @@ namespace lf::bin {
 		using stream_tag = write_stream_tag;
 		error bytes(const lf::byte*, size_t count);
 		error padding(size_t count);
-		template<schema_node... Fields> error operator()(Fields&&... fields);
+		template<schema_node... Fields>
+		error operator()(Fields&&... fields);
 		size_t size() const;
 		write_refs& refs();
 		const string& context() const;
@@ -288,6 +297,7 @@ namespace lf::bin {
 		void set_progress(optional<Progress> value);
 		void add_progress_total(size_t value);
 		void advance_progress(size_t value = 1);
+
 	  private:
 		size_t count_value = 0;
 		write_refs refs_value;
@@ -302,7 +312,7 @@ namespace lf::bin {
 		template<typename Value, typename Default, typename... Args>
 		string_view context_name(const field_node<Value, Default, Args...>& field) { return field.name; }
 
-}
+	} // namespace detail
 
 	template<byte_stream Stream, typename Value, typename Default, lf::version Version, typename... Args>
 	error process(Stream& stream, const field_node<Value, Default, schema_version<Version>, Args...>& field);
@@ -535,7 +545,10 @@ namespace lf::bin {
 	inline void read_stream::set_progress(optional<Progress> value) {
 		progress_value = std::move(value);
 		progress_cursor = cursor_value;
-		if (progress_value) { progress_value->add_total(input.size()); progress_value->advance(cursor_value); }
+		if (progress_value) {
+			progress_value->add_total(input.size());
+			progress_value->advance(cursor_value);
+		}
 	}
 	inline void read_stream::add_progress_total(size_t) {}
 	inline void read_stream::advance_progress(size_t) {}
@@ -561,16 +574,24 @@ namespace lf::bin {
 	inline const string& fixed_write_stream::context() const { return context_value; }
 	inline void fixed_write_stream::set_context(string value) { context_value = std::move(value); }
 	inline void fixed_write_stream::set_progress(optional<Progress> value) { progress_value = std::move(value); }
-	inline void fixed_write_stream::add_progress_total(size_t value) { if (progress_value) { progress_value->add_total(static_cast<u64>(value)); } }
-	inline void fixed_write_stream::advance_progress(size_t value) { if (progress_value) { progress_value->advance(static_cast<u64>(value)); } }
+	inline void fixed_write_stream::add_progress_total(size_t value) {
+		if (progress_value) { progress_value->add_total(static_cast<u64>(value)); }
+	}
+	inline void fixed_write_stream::advance_progress(size_t value) {
+		if (progress_value) { progress_value->advance(static_cast<u64>(value)); }
+	}
 
 	inline size_t measure_stream::size() const { return count_value; }
 	inline write_refs& measure_stream::refs() { return refs_value; }
 	inline const string& measure_stream::context() const { return context_value; }
 	inline void measure_stream::set_context(string value) { context_value = std::move(value); }
 	inline void measure_stream::set_progress(optional<Progress> value) { progress_value = std::move(value); }
-	inline void measure_stream::add_progress_total(size_t value) { if (progress_value) { progress_value->add_total(static_cast<u64>(value)); } }
-	inline void measure_stream::advance_progress(size_t value) { if (progress_value) { progress_value->advance(static_cast<u64>(value)); } }
+	inline void measure_stream::add_progress_total(size_t value) {
+		if (progress_value) { progress_value->add_total(static_cast<u64>(value)); }
+	}
+	inline void measure_stream::advance_progress(size_t value) {
+		if (progress_value) { progress_value->advance(static_cast<u64>(value)); }
+	}
 	inline error measure_stream::bytes(const lf::byte*, size_t count) {
 		count_value += count;
 		return {};
@@ -616,7 +637,10 @@ namespace lf::bin {
 		output.insert(output.end(), input, input + count);
 		return {};
 	}
-	inline error write_stream::padding(size_t count) { output.resize(output.size() + count); return {}; }
+	inline error write_stream::padding(size_t count) {
+		output.resize(output.size() + count);
+		return {};
+	}
 	inline error fixed_write_stream::bytes(const lf::byte* input, size_t count) {
 		if (count > output.size() - cursor_value) {
 			return error(generic_errc::parse_error, detail::message(*this, "writing exceeds output"));
@@ -652,7 +676,8 @@ namespace lf::bin {
 					}
 					return lf::migrate<Version>(field.value, source);
 				}
-			}, field.args);
+			},
+							  field.args);
 		};
 		if constexpr (std::derived_from<std::remove_cvref_t<Value>, reference>) {
 			u64 id = 0;
@@ -678,7 +703,8 @@ namespace lf::bin {
 		auto payload = [&]() -> error {
 			return std::apply([&](auto&... args) -> error {
 				return process(stream, field.value, args...);
-			}, field.args);
+			},
+							  field.args);
 		};
 		if constexpr (std::derived_from<std::remove_cvref_t<Value>, reference>) {
 			u64 id = 0;
@@ -904,7 +930,7 @@ namespace lf::bin {
 				if (auto err = process(stream, encoded); err) {
 					return err;
 				}
-				if (index == max_bytes - 1 && (encoded & 0x7fu) > ((size_t{1} << ((sizeof(size_t) * 8u - 1u) % 7u + 1u)) - 1u)) {
+				if (index == max_bytes - 1 && (encoded & 0x7fu) > ((size_t{ 1 } << ((sizeof(size_t) * 8u - 1u) % 7u + 1u)) - 1u)) {
 					return error(generic_errc::parse_error, detail::message(stream, "size varint overflows"));
 				}
 				result |= static_cast<size_t>(encoded & 0x7fu) << (index * 7u);
@@ -1011,7 +1037,10 @@ namespace lf::bin {
 		bool present = bool(value);
 		if (auto error = stream(lf::field("present", present))) { return error; }
 		if constexpr (readable_byte_stream<Stream>) {
-			if (!present) { value.reset(); return {}; }
+			if (!present) {
+				value.reset();
+				return {};
+			}
 			auto result = std::make_unique<typename Pointer::element_type>();
 			if (auto error = stream(lf::field("value", *result))) { return error; }
 			value = std::move(result);
@@ -1054,10 +1083,13 @@ namespace lf::bin {
 	template<writable_byte_stream Stream, typename Element, size_t Count>
 	error process(Stream& stream, const std::array<Element, Count>& value) {
 		if constexpr (bulk_binary_element<Element>) {
-			return process(stream, span<const Element>{value.data(), value.size()});
+			return process(stream, span<const Element>{ value.data(), value.size() });
 		}
 		for (size_t index = 0; index < Count; ++index) {
-			if (auto error = process(stream, value[index])) { error.message = lf::format("[{}] : {}", index, error.message); return error; }
+			if (auto error = process(stream, value[index])) {
+				error.message = lf::format("[{}] : {}", index, error.message);
+				return error;
+			}
 		}
 		return {};
 	}
@@ -1083,8 +1115,7 @@ namespace lf::bin {
 			}
 			value = std::move(result);
 			return {};
-		}
-		else {
+		} else {
 			for (const auto& [key, mapped] : value) {
 				if (auto err = stream(lf::field("key", key), lf::field("value", mapped)); err) {
 					return err;

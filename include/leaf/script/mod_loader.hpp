@@ -15,7 +15,7 @@ namespace lf {
 	*/
 	extern object Options;
 	object sol_to_object(const sol::object& value);
-}
+} // namespace lf
 
 namespace lf::mod {
 	struct Source {
@@ -42,4 +42,3 @@ namespace lf::mod {
 	*/
 	void Unload();
 } // namespace lf::mod
-

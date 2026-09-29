@@ -167,28 +167,13 @@ namespace rt {
 		d32_sfloat_s8_uint = RT_D32_SFLOAT_S8_UINT,
 	};
 
-	constexpr clear_flag operator|(clear_flag left, clear_flag right) {
-		return static_cast<clear_flag>(static_cast<u32>(left) | static_cast<u32>(right));
-	}
-
-	constexpr clear_flag operator&(clear_flag left, clear_flag right) {
-		return static_cast<clear_flag>(static_cast<u32>(left) & static_cast<u32>(right));
-	}
-
-	constexpr stage_flag operator|(stage_flag left, stage_flag right) {
-		return static_cast<stage_flag>(static_cast<u32>(left) | static_cast<u32>(right));
-	}
-
-	constexpr stage_flag operator&(stage_flag left, stage_flag right) {
-		return static_cast<stage_flag>(static_cast<u32>(left) & static_cast<u32>(right));
-	}
-
-	constexpr texture_aspect_flag operator|(texture_aspect_flag left, texture_aspect_flag right) {
-		return static_cast<texture_aspect_flag>(static_cast<u32>(left) | static_cast<u32>(right));
-	}
-
-	constexpr texture_aspect_flag operator&(texture_aspect_flag left, texture_aspect_flag right) {
-		return static_cast<texture_aspect_flag>(static_cast<u32>(left) & static_cast<u32>(right));
-	}
-
 } // namespace rt
+
+template<>
+struct lf::is_bitfield_enum<rt::clear_flag> : std::true_type {};
+
+template<>
+struct lf::is_bitfield_enum<rt::stage_flag> : std::true_type {};
+
+template<>
+struct lf::is_bitfield_enum<rt::texture_aspect_flag> : std::true_type {};

@@ -4,13 +4,13 @@
 #include "leaf/core/filesystem.hpp"
 #include "leaf/core/logging.hpp"
 #include "leaf/core/scope.hpp"
-#include "leaf/manager/asset.hpp"
-#include "leaf/platform/platform.hpp"
-#include <leaf/resource/registry.hpp>
 #include "leaf/core/span.hpp"
 #include "leaf/core/string.hpp"
+#include "leaf/manager/asset.hpp"
+#include "leaf/platform/platform.hpp"
 #include "leaf/store/lifecycle.hpp"
 #include "leaf/system/system.hpp"
+#include <leaf/resource/registry.hpp>
 
 #include <utility>
 
@@ -72,6 +72,4 @@ namespace lf {
 		exit_system();
 		log::Logger::instance().flush();
 	}
-}
-
-
+} // namespace lf

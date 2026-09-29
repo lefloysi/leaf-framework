@@ -9,6 +9,7 @@ add_library("leaf-script" STATIC
     "mod_enabled.cpp"
     "mod_info.cpp"
     "mod_loader.cpp"
+	"prototype.cpp"
     "cursor.cpp"
     "sound.cpp"
     "state.cpp"

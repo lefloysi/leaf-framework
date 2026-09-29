@@ -466,7 +466,7 @@ namespace lf::fs {
 			const auto file_now = std::filesystem::file_time_type::clock::now();
 			const auto system_now = std::chrono::system_clock::now();
 			const auto system_time = system_now + std::chrono::duration_cast<std::chrono::system_clock::duration>(value - file_now);
-			return timepoint::from_unix_epoch(duration::from_chrono(system_time.time_since_epoch()));
+			return timepoint::from_unix_epoch(timespan::from_chrono(system_time.time_since_epoch()));
 		}
 
 		std::filesystem::file_time_type to_native_time(timepoint value) {
@@ -1070,7 +1070,7 @@ namespace lf::fs {
 			}
 			return parent_backend->write_all_atomic(*full, bytes, options);
 		}
-	}
+	} // namespace detail
 
 	file borrow(span<const u08> bytes) {
 		return file(detail::borrowed_file(bytes.data(), nullptr, bytes.size()));
@@ -1228,8 +1228,9 @@ namespace lf::fs {
 			void detach(u64 id) noexcept {
 				std::unique_lock lock(records_mutex);
 				records.erase(std::remove_if(records.begin(), records.end(), [id](const mount_record& record) {
-					return record.id == id;
-				}), records.end());
+								  return record.id == id;
+							  }),
+							  records.end());
 			}
 
 			report<resolved_node> resolve(const path& location) const {
@@ -1238,8 +1239,8 @@ namespace lf::fs {
 				optional<path> selected_destination;
 				for (const mount_record& record : snapshot) {
 					const bool matches = std::holds_alternative<volume>(record.source)
-						? is_path_prefix(record.destination, location)
-						: record.destination == location;
+											 ? is_path_prefix(record.destination, location)
+											 : record.destination == location;
 					if (!matches) {
 						continue;
 					}
@@ -1413,8 +1414,7 @@ namespace lf::fs {
 					if (record.destination == destination && existing_file != adding_file) {
 						return unexpected(error(error_code::mapping_conflict, "file and volume cannot share a mount destination"));
 					}
-					if ((adding_file && is_path_prefix(destination, record.destination) && destination != record.destination)
-						|| (existing_file && is_path_prefix(record.destination, destination) && destination != record.destination)) {
+					if ((adding_file && is_path_prefix(destination, record.destination) && destination != record.destination) || (existing_file && is_path_prefix(record.destination, destination) && destination != record.destination)) {
 						return unexpected(error(error_code::mapping_conflict, "file mount cannot have mounted descendants"));
 					}
 				}
@@ -1432,7 +1432,7 @@ namespace lf::fs {
 			vector<mount_record> records;
 			std::atomic<u64> next_id = 1;
 		};
-	}
+	} // namespace detail
 
 	mapping::mapping(u64 value, path destination) : id(value), location(std::move(destination)) {}
 	mapping::mapping(mapping&& other) noexcept : id(other.id), location(std::move(other.location)) {
@@ -1732,4 +1732,4 @@ namespace lf::fs {
 	void exit() {
 		system_mappings.clear();
 	}
-}
+} // namespace lf::fs

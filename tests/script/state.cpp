@@ -1,7 +1,7 @@
-#include <leaf/script/state.hpp>
-#include <leaf/script/mod_loader.hpp>
-#include <leaf/core/register.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <leaf/core/register.hpp>
+#include <leaf/script/mod_loader.hpp>
+#include <leaf/script/state.hpp>
 
 TEST_CASE("script states install shared interfaces and retain independent globals", "[script]") {
 	auto first{ lf::CreateState() };

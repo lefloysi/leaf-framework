@@ -16,4 +16,3 @@ namespace rt {
 	void exit_graphics();
 	error rutile_error();
 } // namespace rt
-

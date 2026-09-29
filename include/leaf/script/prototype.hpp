@@ -19,25 +19,11 @@
 #include <type_traits>
 
 namespace lf::prototype_lua {
-	inline void write_value(sol::state_view, sol::table destination, string_view name, string_view value) {
-		destination[string(name)] = string(value);
-	}
-
-	inline void write_value(sol::state_view, sol::table destination, string_view name, const string& value) {
-		destination[string(name)] = value;
-	}
-
-	inline void write_value(sol::state_view, sol::table destination, string_view name, distance value) {
-		destination[string(name)] = value.quantum_count();
-	}
-
-	inline void write_value(sol::state_view, sol::table destination, string_view name, byte value) {
-		destination[string(name)] = std::to_integer<u08>(value);
-	}
-
-	inline void write_value(sol::state_view, sol::table destination, string_view name, u64 value) {
-		destination[string(name)] = std::to_string(value);
-	}
+	void write_value(sol::state_view, sol::table destination, string_view name, string_view value);
+	void write_value(sol::state_view, sol::table destination, string_view name, const string& value);
+	void write_value(sol::state_view, sol::table destination, string_view name, distance value);
+	void write_value(sol::state_view, sol::table destination, string_view name, byte value);
+	void write_value(sol::state_view, sol::table destination, string_view name, u64 value);
 
 	template<std::integral Value>
 	void write_value(sol::state_view, sol::table destination, string_view name, Value value) {
@@ -91,19 +77,6 @@ namespace lf::prototype_lua {
 		sol::table field = lua.create_table();
 		write_value(lua, field, "value", value);
 		destination[index] = field["value"];
-	}
-
-	inline void write_value(sol::state_view lua, sol::table destination, string_view name, const rect<u32>& value) {
-		destination[string(name)] = lua.create_table_with(
-			"x", value.pos.x,
-			"y", value.pos.y,
-			"width", value.dim.width,
-			"height", value.dim.height
-		);
-	}
-
-	inline void write_value(sol::state_view, sol::table destination, string_view name, rt::format value) {
-		destination[string(name)] = static_cast<u32>(value);
 	}
 
 	template<schema_value Value>

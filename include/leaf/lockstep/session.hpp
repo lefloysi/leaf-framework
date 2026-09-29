@@ -7,11 +7,11 @@
 namespace lf::lockstep {
 	struct Options {
 		u16 max_clients = 0;
-		duration connect_timeout = duration::from_quantum(15'000'000'000);
+		timespan connect_timeout = timespan::from_quantum(15'000'000'000);
 	};
 
 	class Session {
-	 public:
+	  public:
 		using ID = identifier<Session, u64, void>;
 
 		struct Input {
@@ -27,13 +27,24 @@ namespace lf::lockstep {
 		};
 
 		struct Event {
-			enum class Type { login_requested, snapshot_requested, snapshot_received, peer_disconnected, disconnected };
+			enum class Type { login_requested,
+							  snapshot_requested,
+							  snapshot_received,
+							  peer_disconnected,
+							  disconnected };
 			Type type;
 			ID session_id;
 			vector<byte> bytes;
 		};
 
-		enum class State { connecting, logging_in, accepting, preparing_snapshot, downloading_snapshot, catching_up, joined, disconnected };
+		enum class State { connecting,
+						   logging_in,
+						   accepting,
+						   preparing_snapshot,
+						   downloading_snapshot,
+						   catching_up,
+						   joined,
+						   disconnected };
 
 		virtual ~Session();
 		Session(const Session&) = delete;
@@ -50,7 +61,7 @@ namespace lf::lockstep {
 		State state() const;
 		bool joined() const;
 
-	 protected:
+	  protected:
 		Session(ID owner, State state);
 		Input make_input(span<const byte> bytes);
 
@@ -63,19 +74,19 @@ namespace lf::lockstep {
 	};
 
 	class LocalSession final : public Session {
-	 public:
+	  public:
 		LocalSession();
 		void update() override;
 		void advance() override;
 		void disconnect() override;
 		Input::ID submit(span<const byte> bytes) override;
 
-	 private:
+	  private:
 		vector<Input> inputs;
 	};
 
 	class HostSession final : public Session {
-	 public:
+	  public:
 		struct SnapshotProgress {
 			ID session_id;
 			u64 bytes_done = 0;
@@ -95,7 +106,7 @@ namespace lf::lockstep {
 		void disconnect() override;
 		Input::ID submit(span<const byte> bytes) override;
 
-	 private:
+	  private:
 		struct Connection {
 			Connection(net::Peer peer, u64 channel, ID player);
 			net::Channel channel;
@@ -120,7 +131,7 @@ namespace lf::lockstep {
 	};
 
 	class RemoteSession final : public Session {
-	 public:
+	  public:
 		struct SnapshotProgress {
 			u64 bytes_done = 0;
 			u64 bytes_total = 0;
@@ -137,7 +148,7 @@ namespace lf::lockstep {
 		void disconnect() override;
 		Input::ID submit(span<const byte> bytes) override;
 
-	 private:
+	  private:
 		void receive(vector<byte> bytes);
 		void close();
 		void drain();
@@ -145,8 +156,8 @@ namespace lf::lockstep {
 		net::Socket socket;
 		net::Channel channel;
 		Options options;
-		instant started = now();
+		timespan started = now();
 		optional<u64> snapshot_size;
 		vector<Frame> buffered;
 	};
-}
+} // namespace lf::lockstep

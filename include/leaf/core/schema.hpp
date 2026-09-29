@@ -36,7 +36,7 @@ namespace lf {
 
 	namespace detail {
 		struct missing_migration_source {};
-	}
+	} // namespace detail
 
 	// Specialize this for each target schema version that has an immediately
 	// preceding source schema version.
@@ -269,7 +269,7 @@ namespace lf {
 				std::apply([&](const auto&... child) { (visit_schema_fields(child, visitor), ...); }, conditional.children);
 			}
 		}
-	}
+	} // namespace detail
 
 	template<schema_node Node, typename Visitor>
 	void visit_schema_fields(const Node& node, Visitor&& visitor) {

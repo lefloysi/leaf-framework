@@ -8,9 +8,11 @@
 #include <type_traits>
 
 namespace lf {
-	enum class Primitive { points,
-						   lines,
-						   triangles };
+	enum class Primitive { 
+		points,
+		lines,
+		triangles 
+	};
 
 	template<typename Vertex, typename Index = u32>
 	struct MeshView {

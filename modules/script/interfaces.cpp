@@ -1,9 +1,9 @@
 #include "leaf/script/state.hpp"
-#include <leaf/script/settings.hpp>
-#include <leaf/script/mod_loader.hpp>
-#include <leaf/script/mod_enabled.hpp>
-#include <leaf/script/localization.hpp>
 #include <leaf/core/exception.hpp>
+#include <leaf/script/localization.hpp>
+#include <leaf/script/mod_enabled.hpp>
+#include <leaf/script/mod_loader.hpp>
+#include <leaf/script/settings.hpp>
 
 #include <limits>
 
@@ -15,11 +15,15 @@ namespace lf {
 				return sol::make_object(state, sol::nil);
 			} else if constexpr (std::same_as<T, dict>) {
 				auto result{ state.create_table() };
-				for (const auto& [key, entry] : item) { result[key] = object_to_sol(state, entry); }
+				for (const auto& [key, entry] : item) {
+					result[key] = object_to_sol(state, entry);
+				}
 				return result;
 			} else if constexpr (std::same_as<T, list>) {
 				auto result{ state.create_table() };
-				for (usize index{}; index < item.size(); ++index) { result[index + 1] = object_to_sol(state, item[index]); }
+				for (usize index{}; index < item.size(); ++index) {
+					result[index + 1] = object_to_sol(state, item[index]);
+				}
 				return result;
 			} else if constexpr (std::same_as<T, u64>) {
 				if (item > static_cast<u64>(std::numeric_limits<lua_Integer>::max())) {
@@ -66,7 +70,9 @@ namespace lf {
 			sol::state_view state{ lua };
 			auto result{ state.create_table() };
 			usize index{};
-			for (const auto& language : AvailableLanguages()) { result[++index] = state.create_table_with("id", language.id, "name", language.name, "native_name", language.native_name); }
+			for (const auto& language : AvailableLanguages()) {
+				result[++index] = state.create_table_with("id", language.id, "name", language.name, "native_name", language.native_name);
+			}
 			return result;
 		});
 		auto mods{ state.create_named_table("mods") };
@@ -83,4 +89,4 @@ namespace lf {
 		});
 		return {};
 	}
-}
+} // namespace lf

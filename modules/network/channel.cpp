@@ -7,13 +7,13 @@
 namespace lf::net {
 	namespace {
 		constexpr u32 PROTOCOL = 0x09464c43;
-		constexpr auto RETRY = duration::from_quantum(50'000'000);
-		constexpr auto HEARTBEAT = duration::from_quantum(500'000'000);
+		constexpr auto RETRY = timespan::from_quantum(50'000'000);
+		constexpr auto HEARTBEAT = timespan::from_quantum(500'000'000);
 
 		void check(error error) {
 			if (error) { throw runtime_exception(error.message); }
 		}
-	}
+	} // namespace
 
 	Channel::Channel(Peer peer, u64 id) : endpoint(std::move(peer)), identity(id) {}
 
@@ -21,8 +21,7 @@ namespace lf::net {
 		bin::read_stream stream{ bytes };
 		u32 protocol = 0;
 		Datagram packet;
-		if (auto error = stream(field("protocol", protocol), field("channel", packet.channel),
-			field("offset", packet.offset), field("acknowledged", packet.acknowledged))) {
+		if (auto error = stream(field("protocol", protocol), field("channel", packet.channel), field("offset", packet.offset), field("acknowledged", packet.acknowledged))) {
 			return unexpected(error);
 		}
 		if (protocol != PROTOCOL || !packet.channel || stream.remaining() > PACKET_BYTES) {
@@ -86,8 +85,7 @@ namespace lf::net {
 	void Channel::transmit(Socket& socket, u64 offset, span<const byte> bytes) {
 		std::array<byte, PACKET_BYTES + 32> buffer;
 		bin::fixed_write_stream stream{ buffer };
-		check(stream(field("protocol", PROTOCOL), field("channel", identity),
-			field("offset", offset), field("acknowledged", received)));
+		check(stream(field("protocol", PROTOCOL), field("channel", identity), field("offset", offset), field("acknowledged", received)));
 		check(stream.bytes(bytes.data(), bytes.size()));
 		socket.send(endpoint, stream.written());
 		acknowledgement_due = false;
@@ -121,7 +119,7 @@ namespace lf::net {
 	vector<vector<byte>> Channel::take_messages() { return std::exchange(messages, {}); }
 	const Peer& Channel::peer() const { return endpoint; }
 	u64 Channel::id() const { return identity; }
-	instant Channel::last_received() const { return activity; }
+	timespan Channel::last_received() const { return activity; }
 	u64 Channel::sent_bytes() const { return outgoing_base + outgoing.size(); }
 	u64 Channel::acknowledged_bytes() const { return acknowledged; }
 	u64 Channel::received_message_bytes() const {
@@ -134,4 +132,4 @@ namespace lf::net {
 		check(stream(field("size", size)));
 		return size;
 	}
-}
+} // namespace lf::net

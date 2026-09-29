@@ -1,9 +1,9 @@
 #include "leaf/resource/prototypes/cursor.hpp"
 
+#include "leaf/core/filesystem.hpp"
 #include "leaf/core/format.hpp"
 #include "leaf/core/logging.hpp"
 #include "leaf/platform/platform.hpp"
-#include "leaf/core/filesystem.hpp"
 
 #include <stb_image.h>
 

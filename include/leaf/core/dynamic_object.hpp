@@ -3,11 +3,11 @@
 #include "leaf/core/cast.hpp"
 #include "leaf/core/concepts.hpp"
 #include "leaf/core/distance.hpp"
-#include "leaf/core/normalized.hpp"
-#include "leaf/core/math/pos.hpp"
-#include "leaf/core/math/dim.hpp"
 #include "leaf/core/error.hpp"
 #include "leaf/core/exception.hpp"
+#include "leaf/core/math/dim.hpp"
+#include "leaf/core/math/pos.hpp"
+#include "leaf/core/normalized.hpp"
 #include "leaf/core/schema.hpp"
 #include "leaf/core/string_types.hpp"
 #include "leaf/core/typename.hpp"
@@ -31,8 +31,6 @@ namespace lf {
 	class list;
 	class object;
 
-
-
 	using dict_underlying = unordered_map_string<object>;
 	using list_underlying = vector<object>;
 	using object_underlying = std::variant<std::monostate, bool, i64, u64, f64, string, dict, list>;
@@ -41,7 +39,7 @@ namespace lf {
 	concept scalar_object_value = std::integral<T> || std::floating_point<T> || std::same_as<T, string>;
 
 	class dict : public dict_underlying {
-	template<typename T, typename Default, typename... Args>
+		template<typename T, typename Default, typename... Args>
 		field_presence assign_schema(const field_node<T, Default, Args...>& field) const;
 
 		template<typename... Fields>
@@ -329,47 +327,11 @@ namespace lf {
 
 	template<>
 	struct object_trait<f32> {
-		static f32 parse(const object& obj) {
-			if (obj.is<f64>()) {
-				f64 d = obj.get<f64>();
-				if (d < static_cast<f64>(std::numeric_limits<f32>::lowest()) ||
-					d > static_cast<f64>(std::numeric_limits<f32>::max())) {
-					throw lf::runtime_exception(lf::format("value {} out of range for f32", d));
-				}
-				return static_cast<f32>(d);
-			} else if (obj.is<i64>()) {
-				i64 i = obj.get<i64>();
-				if (static_cast<f64>(i) < static_cast<f64>(std::numeric_limits<f32>::lowest()) ||
-					static_cast<f64>(i) > static_cast<f64>(std::numeric_limits<f32>::max())) {
-					throw lf::runtime_exception(lf::format("value {} out of range for f32", i));
-				}
-				return static_cast<f32>(i);
-			} else if (obj.is<u64>()) {
-				u64 u = obj.get<u64>();
-				if (static_cast<f64>(u) > static_cast<f64>(std::numeric_limits<f32>::max())) {
-					throw lf::runtime_exception(lf::format("value {} out of range for f32", u));
-				}
-				return static_cast<f32>(u);
-			} else {
-				throw lf::runtime_exception(lf::format("cannot convert type '{}' to f32", obj.current_type_name()));
-			}
-		}
+		static f32 parse(const object& obj);
 	};
 	template<>
 	struct object_trait<f64> {
-		static f64 parse(const object& obj) {
-			if (obj.is<f64>()) {
-				return obj.get<f64>();
-			} else if (obj.is<i64>()) {
-				i64 i = obj.get<i64>();
-				return static_cast<f64>(i);
-			} else if (obj.is<u64>()) {
-				u64 u = obj.get<u64>();
-				return static_cast<f64>(u);
-			} else {
-				throw lf::runtime_exception(lf::format("cannot convert type '{}' to f64", obj.current_type_name()));
-			}
-		}
+		static f64 parse(const object& obj);
 	};
 
 	template<normalized_integer T>
@@ -386,159 +348,62 @@ namespace lf {
 	};
 	template<>
 	struct object_trait<bool> {
-		static bool parse(const object& obj) {
-			if (obj.is<bool>()) {
-				return obj.get<bool>();
-			}
-			throw lf::runtime_exception(lf::format("cannot convert type '{}' to bool", obj.current_type_name()));
-		}
+		static bool parse(const object& obj);
 	};
 
 	template<>
 	struct object_trait<i64> {
-		static i64 parse(const object& obj) {
-			if (obj.is<i64>()) {
-				return obj.get<i64>();
-			}
-			if (obj.is<u64>()) {
-				u64 v = obj.get<u64>();
-				if (v > static_cast<u64>(std::numeric_limits<i64>::max())) {
-					throw lf::runtime_exception(lf::format("value {} out of range for i64", v));
-				}
-				return static_cast<i64>(v);
-			}
-			if (obj.is<f64>()) {
-				return static_cast<i64>(obj.get<f64>());
-			}
-			throw lf::runtime_exception(lf::format("cannot convert type '{}' to i64", obj.current_type_name()));
-		}
+		static i64 parse(const object& obj);
 	};
 	template<>
-	struct object_trait<distance> {
-		static distance parse(const object& obj) {
-			return distance::from_quantum(object_trait<i64>::parse(obj));
-		}
+	struct object_trait<::lf::distance> {
+		static ::lf::distance parse(const object& obj);
 	};
 	template<>
 	struct object_trait<u64> {
-		static u64 parse(const object& obj) {
-			if (obj.is<u64>()) {
-				return obj.get<u64>();
-			}
-			if (obj.is<i64>()) {
-				i64 v = obj.get<i64>();
-				if (v < 0) {
-					throw lf::runtime_exception(lf::format("value {} out of range for u64", v));
-				}
-				return static_cast<u64>(v);
-			}
-			if (obj.is<f64>()) {
-				f64 v = obj.get<f64>();
-				if (v < 0 || v > static_cast<f64>(std::numeric_limits<u64>::max())) {
-					throw lf::runtime_exception(lf::format("value {} out of range for u64", v));
-				}
-				return static_cast<u64>(v);
-			}
-			throw lf::runtime_exception(lf::format("cannot convert type '{}' to u64", obj.current_type_name()));
-		}
+		static u64 parse(const object& obj);
 	};
 
 	template<>
 	struct object_trait<i32> {
-		static i32 parse(const object& obj) {
-			i64 v = object_trait<i64>::parse(obj);
-			if (v < static_cast<i64>(std::numeric_limits<i32>::min()) ||
-				v > static_cast<i64>(std::numeric_limits<i32>::max())) {
-				throw lf::runtime_exception(lf::format("value {} out of range for i32", v));
-			}
-			return static_cast<i32>(v);
-		}
+		static i32 parse(const object& obj);
 	};
 	template<>
 	struct object_trait<u32> {
-		static u32 parse(const object& obj) {
-			u64 v = object_trait<u64>::parse(obj);
-			if (v > static_cast<u64>(std::numeric_limits<u32>::max())) {
-				throw lf::runtime_exception(lf::format("value {} out of range for u32", v));
-			}
-			return static_cast<u32>(v);
-		}
+		static u32 parse(const object& obj);
 	};
 	template<>
 	struct object_trait<i16> {
-		static i16 parse(const object& obj) {
-			i64 v = object_trait<i64>::parse(obj);
-			if (v < static_cast<i64>(std::numeric_limits<i16>::min()) ||
-				v > static_cast<i64>(std::numeric_limits<i16>::max())) {
-				throw lf::runtime_exception(lf::format("value {} out of range for i16", v));
-			}
-			return static_cast<i16>(v);
-		}
+		static i16 parse(const object& obj);
 	};
 	template<>
 	struct object_trait<u16> {
-		static u16 parse(const object& obj) {
-			u64 v = object_trait<u64>::parse(obj);
-			if (v > static_cast<u64>(std::numeric_limits<u16>::max())) {
-				throw lf::runtime_exception(lf::format("value {} out of range for u16", v));
-			}
-			return static_cast<u16>(v);
-		}
+		static u16 parse(const object& obj);
 	};
 	template<>
 	struct object_trait<i08> {
-		static i08 parse(const object& obj) {
-			i64 v = object_trait<i64>::parse(obj);
-			if (v < static_cast<i64>(std::numeric_limits<i08>::min()) ||
-				v > static_cast<i64>(std::numeric_limits<i08>::max())) {
-				throw lf::runtime_exception(lf::format("value {} out of range for i08", v));
-			}
-			return static_cast<i08>(v);
-		}
+		static i08 parse(const object& obj);
 	};
 	template<>
 	struct object_trait<u08> {
-		static u08 parse(const object& obj) {
-			u64 v = object_trait<u64>::parse(obj);
-			if (v > static_cast<u64>(std::numeric_limits<u08>::max())) {
-				throw lf::runtime_exception(lf::format("value {} out of range for u08", v));
-			}
-			return static_cast<u08>(v);
-		}
+		static u08 parse(const object& obj);
 	};
 	template<>
 	struct object_trait<byte> {
-		static byte parse(const object& obj) {
-			return static_cast<byte>(object_trait<u08>::parse(obj));
-		}
+		static byte parse(const object& obj);
 	};
 
 	template<>
 	struct object_trait<string> {
-		static string parse(const object& obj) {
-			if (obj.is<string>()) {
-				return obj.get<string>();
-			}
-			throw runtime_exception(lf::format("cannot convert type '{}' to string", obj.current_type_name()));
-		}
+		static string parse(const object& obj);
 	};
 	template<>
 	struct object_trait<dict> {
-		static dict parse(const object& obj) {
-			if (obj.is<dict>()) {
-				return obj.get<dict>();
-			}
-			throw runtime_exception(lf::format("cannot convert type '{}' to dict", obj.current_type_name()));
-		}
+		static dict parse(const object& obj);
 	};
 	template<>
 	struct object_trait<list> {
-		static list parse(const object& obj) {
-			if (obj.is<list>()) {
-				return obj.get<list>();
-			}
-			throw runtime_exception(lf::format("cannot convert type '{}' to list", obj.current_type_name()));
-		}
+		static list parse(const object& obj);
 	};
 	template<typename T, glm::qualifier Qualifier>
 	struct object_trait<glm::vec<2, T, Qualifier>> {

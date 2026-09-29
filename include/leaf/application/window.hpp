@@ -200,13 +200,8 @@ namespace lf {
 	struct input_modifiers {
 		u08 value = 0;
 
-		void add(input_modifier modifier) {
-			value |= modifier;
-		}
-
-		bool has(input_modifier modifier) const {
-			return (value & modifier) != 0;
-		}
+		void add(input_modifier modifier);
+		bool has(input_modifier modifier) const;
 	};
 
 	enum input_event_type : u08 {

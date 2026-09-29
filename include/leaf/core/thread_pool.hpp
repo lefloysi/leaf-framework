@@ -77,4 +77,3 @@ namespace lf {
 		bool stopping = false;
 	};
 } // namespace lf
-

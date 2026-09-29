@@ -9,7 +9,7 @@ namespace lf::net {
 	// An ordered message stream over a datagram socket. The channel owns bytes
 	// until acknowledged; callers only lend their input during send().
 	class Channel {
-	 public:
+	  public:
 		struct Datagram {
 			u64 channel = 0;
 			u64 offset = 0;
@@ -28,13 +28,13 @@ namespace lf::net {
 		vector<vector<byte>> take_messages();
 		const Peer& peer() const;
 		u64 id() const;
-		instant last_received() const;
+		timespan last_received() const;
 		u64 received_message_bytes() const;
 		u64 incoming_message_bytes() const;
 		u64 sent_bytes() const;
 		u64 acknowledged_bytes() const;
 
-	 private:
+	  private:
 		void transmit(Socket& socket, u64 offset, span<const byte> bytes);
 		error assemble();
 
@@ -48,9 +48,9 @@ namespace lf::net {
 		u64 received = 0;
 		std::map<u64, vector<byte>> reordered;
 		vector<vector<byte>> messages;
-		instant activity = now();
-		instant retry = now();
-		instant heartbeat = now();
+		timespan activity = now();
+		timespan retry = now();
+		timespan heartbeat = now();
 		bool acknowledgement_due = false;
 	};
-}
+} // namespace lf::net

@@ -7,6 +7,7 @@
 #include "leaf/core/types.hpp"
 #include "leaf/core/vector.hpp"
 
+#include <algorithm>
 #include <concepts>
 #include <tuple>
 #include <type_traits>
@@ -66,6 +67,7 @@ namespace lf {
 	class component_container {
 	  public:
 		using handle = Handle;
+		using storage = std::tuple<std::pair<vector<Component>, vector<size_t>>...>;
 
 		class entity {
 		  public:
@@ -142,38 +144,101 @@ namespace lf {
 			}
 		};
 
+		struct Changes {
+			struct Entity {
+				Handle id{};
+				bool present = true;
+				std::tuple<optional<Component>...> components;
+
+				template<bin::byte_stream Stream, bin::data<Entity> Value>
+				friend error process(Stream& stream, Value& value) {
+					if (auto result = stream(field("id", value.id), field("present", value.present))) { return result; }
+					error result;
+					std::apply([&](auto&... components) {
+						((!result && !(result = stream(field("component", components)))) && ...);
+					},
+							   value.components);
+					return result;
+				}
+			};
+
+			vector<Entity> entities;
+
+			void record(const component_container& source, Handle id);
+			void record_all(const component_container& source);
+			void merge(const Changes& other);
+			void apply(component_container& destination) const;
+			void reset();
+			bool empty() const;
+		};
+
 		template<bin::byte_stream Stream, bin::data<component_container> Value>
 		friend error process(Stream& stream, Value& value) {
-			if (auto result = stream(field("slots", value.slots), field("free", value.free))) { return result; }
+			if (auto result = stream(field("slots", value.slots), field("free", value.free))) {
+				return result;
+			}
+
 			error result;
 			std::apply([&](auto&... storage) {
-				((!result && !(result = stream(field("values", storage.first), field("owners", storage.second)))) && ...);
-			}, value.components);
-			if (result) { return result; }
+				auto process_storage = [&]<typename Storage>(Storage& storage) {
+					if (result) {
+						return;
+					}
+
+					result = stream(
+						field("values", storage.first),
+						field("owners", storage.second)
+					);
+				};
+
+				(process_storage(storage), ...);
+			},
+				value.components);
+			if (result) {
+				return result;
+			}
+
 			if constexpr (bin::readable_byte_stream<Stream>) {
 				vector<bool> available(value.slots.size());
-				for (usize index : value.free) {
-					if (index >= available.size() || available[index]) { return { generic_errc::input_error, "Invalid free entity slot" }; }
+				for (const usize index : value.free) {
+					if (index >= available.size() || available[index]) {
+						return { generic_errc::input_error, "Invalid free entity slot" };
+					}
 					available[index] = true;
 				}
+
 				usize component = 0;
 				std::apply([&](const auto&... storage) {
 					([&] {
 						const auto& [values, owners] = storage;
-						if (values.empty() || values.size() != owners.size()) { result = { generic_errc::input_error, "Invalid component storage" }; return; }
+						if (values.empty() || values.size() != owners.size()) {
+							result = { generic_errc::input_error, "Invalid component storage" };
+							return;
+						}
+
 						for (usize index = 1; index < owners.size(); ++index) {
-							if (owners[index] >= value.slots.size() || available[owners[index]] || value.slots[owners[index]].components[component] != index) {
-								result = { generic_errc::input_error, "Invalid component owner" }; return;
+							const usize owner = owners[index];
+							if (owner >= value.slots.size() || available[owner] || value.slots[owner].components[component] != index) {
+								result = { generic_errc::input_error, "Invalid component owner" };
+								return;
 							}
 						}
+
 						for (usize index = 0; index < value.slots.size(); ++index) {
 							const usize dense = value.slots[index].components[component];
-							if (dense >= values.size() || (dense && owners[dense] != index)) { result = { generic_errc::input_error, "Invalid component index" }; return; }
+							if (dense >= values.size() || (dense && owners[dense] != index)) {
+								result = { generic_errc::input_error, "Invalid component index" };
+								return;
+							}
 						}
+
 						++component;
-					}(), ...);
-				}, value.components);
+					}(),
+					 ...);
+				},
+						   value.components);
 			}
+
 			return result;
 		}
 
@@ -218,6 +283,10 @@ namespace lf {
 			return entity{ *this, value };
 		}
 
+		bool exists(Handle value) const {
+			return value && value < slots.size() && std::ranges::find(free, value) == free.end();
+		}
+
 		size_t slot_count() const {
 			return slots.size();
 		}
@@ -233,9 +302,10 @@ namespace lf {
 		}
 
 		void destroy(Handle value) {
+			if (!exists(value)) { return; }
 			(erase<Component>(value), ...);
-			slots[usize(value)] = {};
-			free.push_back(usize(value));
+			slots[value] = {};
+			free.push_back(value);
 		}
 
 		void clear() {
@@ -244,18 +314,18 @@ namespace lf {
 
 		template<typename T>
 		bool has(Handle value) const {
-			return value && usize(value) < slots.size() && slots[usize(value)].components[component_index<T>] != 0;
+			return value && value < slots.size() && slots[value].components[component_index<T>] != 0;
 		}
 
 		template<typename T>
 		T& add(Handle value, T component = {}) {
 			auto& [values, owners] = std::get<component_index<T>>(components);
-			size_t& index = slots[usize(value)].components[component_index<T>];
+			size_t& index = slots[value].components[component_index<T>];
 			if (index != 0) {
 				return values[index];
 			}
 			index = values.size();
-			owners.push_back(usize(value));
+			owners.push_back(value);
 			return values.emplace_back(std::move(component));
 		}
 
@@ -263,7 +333,7 @@ namespace lf {
 		auto find(Handle value) {
 			auto& values = std::get<component_index<T>>(components).first;
 			if (!has<T>(value)) { return values.end(); }
-			const size_t index = slots[usize(value)].components[component_index<T>];
+			const size_t index = slots[value].components[component_index<T>];
 			return index == 0 ? values.end() : values.begin() + index;
 		}
 
@@ -271,8 +341,19 @@ namespace lf {
 		auto find(Handle value) const {
 			const auto& values = std::get<component_index<T>>(components).first;
 			if (!has<T>(value)) { return values.end(); }
-			const size_t index = slots[usize(value)].components[component_index<T>];
+			const size_t index = slots[value].components[component_index<T>];
 			return index == 0 ? values.end() : values.begin() + index;
+		}
+
+		void destroy_if_present(Handle value) {
+			if (exists(value)) { destroy(value); }
+		}
+
+		void ensure(Handle value) {
+			if (exists(value)) { return; }
+			if (slots.size() <= value) { slots.resize(value + 1); }
+			std::erase(free, value);
+			slots[value] = {};
 		}
 
 		template<typename T>
@@ -289,7 +370,7 @@ namespace lf {
 		void each(F&& function) {
 			auto& [values, owners] = std::get<component_index<T>>(components);
 			for (size_t index = 1; index < values.size(); ++index) {
-				function(Handle{owners[index]}, values[index]);
+				function(Handle{ owners[index] }, values[index]);
 			}
 		}
 
@@ -297,7 +378,7 @@ namespace lf {
 		void each(F&& function) const {
 			const auto& [values, owners] = std::get<component_index<T>>(components);
 			for (size_t index = 1; index < values.size(); ++index) {
-				function(Handle{owners[index]}, values[index]);
+				function(Handle{ owners[index] }, values[index]);
 			}
 		}
 
@@ -313,7 +394,7 @@ namespace lf {
 
 		template<typename T>
 		void erase(Handle value) {
-			size_t index = slots[usize(value)].components[component_index<T>];
+			size_t index = slots[value].components[component_index<T>];
 			if (index == 0) {
 				return;
 			}
@@ -328,12 +409,13 @@ namespace lf {
 			}
 			values.pop_back();
 			owners.pop_back();
-			slots[usize(value)].components[component_index<T>] = 0;
+			slots[value].components[component_index<T>] = 0;
 		}
 
 	  private:
 		template<typename T>
 		static constexpr size_t component_index = [] {
+			static_assert((std::same_as<T, Component> || ...), "Component type is not registered in this component_container");
 			constexpr array matches{ std::same_as<T, Component>... };
 			for (size_t index = 0; index < matches.size(); ++index) {
 				if (matches[index]) {
@@ -347,7 +429,9 @@ namespace lf {
 
 		vector<slot> slots;
 		vector<size_t> free;
-		std::tuple<std::pair<vector<Component>, vector<size_t>>...> components;
+		storage components;
 	};
 
 } // namespace lf
+
+#include "leaf/core/component_container.inl"

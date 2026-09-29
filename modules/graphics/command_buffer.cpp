@@ -8,7 +8,6 @@ namespace rt::CommandBuffer {
 	}
 } // namespace rt::CommandBuffer
 
-
 namespace rt::Cmd {
 	void Destroy(handle<command_buffer> command_buffer) {
 		rtCommandBufferDestroy(command_buffer);

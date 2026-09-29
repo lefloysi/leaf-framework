@@ -33,4 +33,4 @@ namespace lf::lockstep {
 		if (!joined()) { return; }
 		ready.push_back(Frame{ ++current_tick, std::exchange(inputs, {}) });
 	}
-}
+} // namespace lf::lockstep

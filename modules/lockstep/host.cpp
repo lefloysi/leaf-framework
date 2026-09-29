@@ -35,8 +35,7 @@ namespace lf::lockstep {
 		for (auto& connection : connections) {
 			if (connection.player != player || connection.state != State::preparing_snapshot) { continue; }
 			const u64 size = snapshot.size();
-			protocol::send(connection.channel, protocol::Type::snapshot_begin,
-				field("tick", current_tick), field("size", size));
+			protocol::send(connection.channel, protocol::Type::snapshot_begin, field("tick", current_tick), field("size", size));
 			const auto begin = connection.channel.sent_bytes();
 			protocol::send_bytes(connection.channel, protocol::Type::snapshot, snapshot);
 			connection.snapshot = Connection::Upload{ begin, connection.channel.sent_bytes() };
@@ -58,45 +57,68 @@ namespace lf::lockstep {
 
 	void HostSession::disconnect_peer(ID player) {
 		for (auto& connection : connections) {
-			if (connection.player == player) { close(connection); return; }
+			if (connection.player == player) {
+				close(connection);
+				return;
+			}
 		}
 	}
 
 	void HostSession::disconnect() {
 		if (status == State::disconnected) { return; }
-		for (auto& connection : connections) { close(connection); }
+		for (auto& connection : connections) {
+			close(connection);
+		}
 		status = State::disconnected;
 	}
 
 	void HostSession::receive(Connection& connection, span<const byte> bytes) {
 		bin::read_stream stream{ bytes };
 		protocol::Type type;
-		if (stream(field("type", type))) { close(connection); return; }
+		if (stream(field("type", type))) {
+			close(connection);
+			return;
+		}
 		switch (type) {
 		case protocol::Type::join: {
 			if (connection.state != State::connecting) { return; }
 			const auto active = std::count_if(connections.begin(), connections.end(), [](const auto& peer) {
 				return peer.state != State::connecting && peer.state != State::disconnected;
 			});
-			if (options.max_clients && active >= options.max_clients) { close(connection); return; }
+			if (options.max_clients && active >= options.max_clients) {
+				close(connection);
+				return;
+			}
 			connection.state = State::logging_in;
 			const auto login = bytes.last(stream.remaining());
 			events.push_back(Event{ Event::Type::login_requested, connection.player, { login.begin(), login.end() } });
 			break;
 		}
 		case protocol::Type::loaded:
-			if (stream.remaining() || connection.state != State::downloading_snapshot) { close(connection); return; }
+			if (stream.remaining() || connection.state != State::downloading_snapshot) {
+				close(connection);
+				return;
+			}
 			connection.state = State::joined;
 			connection.snapshot.reset();
 			break;
 		case protocol::Type::input: {
-			if (connection.state != State::joined) { close(connection); return; }
+			if (connection.state != State::joined) {
+				close(connection);
+				return;
+			}
 			Input::ID id;
-			if (stream(field("id", id)) || !id) { close(connection); return; }
+			if (stream(field("id", id)) || !id) {
+				close(connection);
+				return;
+			}
 			const auto input = bytes.last(stream.remaining());
 			auto approved = input_handler ? input_handler(connection.player, input)
-				: report<vector<byte>>{ vector<byte>{ input.begin(), input.end() } };
-			if (!approved) { close(connection); return; }
+										  : report<vector<byte>>{ vector<byte>{ input.begin(), input.end() } };
+			if (!approved) {
+				close(connection);
+				return;
+			}
 			inputs.push_back(Input{ id, connection.player, std::move(*approved) });
 			break;
 		}
@@ -126,13 +148,21 @@ namespace lf::lockstep {
 				found = connections.end() - 1;
 			}
 			if (found->state == State::disconnected) { continue; }
-			if (found->channel.receive(*packet)) { close(*found); continue; }
-			for (const auto& bytes : found->channel.take_messages()) { receive(*found, bytes); }
+			if (found->channel.receive(*packet)) {
+				close(*found);
+				continue;
+			}
+			for (const auto& bytes : found->channel.take_messages()) {
+				receive(*found, bytes);
+			}
 		}
 		for (auto& connection : connections) {
 			if (connection.state == State::disconnected) { continue; }
 			if (connection.state != State::preparing_snapshot && connection.state != State::downloading_snapshot &&
-				now() - connection.channel.last_received() >= options.connect_timeout) { close(connection); continue; }
+				now() - connection.channel.last_received() >= options.connect_timeout) {
+				close(connection);
+				continue;
+			}
 			connection.channel.update(socket);
 			if (connection.state == State::accepting && connection.channel.acknowledged_bytes() >= connection.acceptance) {
 				connection.state = State::preparing_snapshot;
@@ -166,4 +196,4 @@ namespace lf::lockstep {
 		}
 		return result;
 	}
-}
+} // namespace lf::lockstep

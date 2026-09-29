@@ -9,8 +9,8 @@
 #include <rt_swapchain.h>
 #include <rutile.h>
 
-#include <cstdlib>
 #include <algorithm>
+#include <cstdlib>
 #include <iterator>
 #include <string>
 #include <vector>
@@ -122,7 +122,7 @@ namespace rt {
 
 	error init_graphics(span<string_view> args) {
 		lf::log::Info("[leaf] Starting graphics...");
-		string graphics_api{DefaultGraphicsAPI};
+		string graphics_api{ DefaultGraphicsAPI };
 		if (error err = parse_graphics_backend(args, graphics_api)) {
 			return err;
 		}
@@ -171,5 +171,3 @@ namespace rt {
 
 	string_view GraphicsBackendName() { return rtGetName(); }
 } // namespace rt
-
-

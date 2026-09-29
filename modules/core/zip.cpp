@@ -470,7 +470,7 @@ namespace lf::detail {
 		if ((stat.valid & ZIP_STAT_MTIME) == 0) {
 			return optional<timepoint>();
 		}
-		return timepoint::from_unix_epoch(duration::from_chrono(std::chrono::seconds(stat.mtime)));
+		return timepoint::from_unix_epoch(timespan::from_chrono(std::chrono::seconds(stat.mtime)));
 	}
 
 	report<void> zip_volume::add_entry(string name, zip_entry entry) {

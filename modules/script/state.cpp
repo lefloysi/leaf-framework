@@ -1,6 +1,6 @@
 #include "leaf/script/state.hpp"
-#include <leaf/core/register.hpp>
 #include <leaf/core/exception.hpp>
+#include <leaf/core/register.hpp>
 
 namespace lf {
 	error InstallScriptInterfaces(sol::state& state);
@@ -15,4 +15,4 @@ namespace lf {
 		if (const auto error{ Register<sol::state>::install(state) }) { throw runtime_exception(error.message); }
 		return state;
 	}
-}
+} // namespace lf

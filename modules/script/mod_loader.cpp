@@ -1,13 +1,13 @@
 #include "leaf/script/mod_loader.hpp"
 
+#include "leaf/core/filesystem.hpp"
 #include "leaf/core/logging.hpp"
-#include "leaf/script/localization.hpp"
-#include "leaf/script/mod_enabled.hpp"
+#include "leaf/core/scope.hpp"
 #include "leaf/resource/prototypes/texture.hpp"
 #include "leaf/resource/registry.hpp"
+#include "leaf/script/localization.hpp"
+#include "leaf/script/mod_enabled.hpp"
 #include "leaf/script/settings.hpp"
-#include "leaf/core/filesystem.hpp"
-#include "leaf/core/scope.hpp"
 
 #include <leaf/graphics/graphics.hpp>
 #include <leaf/graphics/queue.hpp>
@@ -857,7 +857,6 @@ end
 	error mod::Load(span<const Source> sources, Progress progress) {
 #define CANCELLED_ERROR error(generic_errc::cancelled, "startup cancelled")
 
-
 		log::Info("{}", "[mod-loader] loading mods");
 		Unload();
 		scope_exit rollback{ [] { Unload(); } };
@@ -1101,10 +1100,10 @@ end
 	}
 
 	error SaveInputSetting(string_view mod_name, string_view action, string_view key) {
-        const string mod_key(mod_name.empty() ? "core" : mod_name);
-        detail::loaded_settings[mod_key].input[string(action)] = string(key);
-        return detail::write_mod_settings(mod_key);
-    }
+		const string mod_key(mod_name.empty() ? "core" : mod_name);
+		detail::loaded_settings[mod_key].input[string(action)] = string(key);
+		return detail::write_mod_settings(mod_key);
+	}
 
 	error EnsureInputSetting(string_view mod_name, string_view action, string_view key) {
 		const string mod_key(mod_name.empty() ? "core" : mod_name);
@@ -1124,5 +1123,3 @@ end
 		detail::loaded_settings.clear();
 	}
 } // namespace lf
-
-

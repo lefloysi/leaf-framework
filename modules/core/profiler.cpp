@@ -13,9 +13,9 @@
 
 namespace lf {
 	struct ProfileBucket {
-			u64 calls = 0;
-			f64 total_ms = 0.0;
-			f64 max_ms = 0.0;
+		u64 calls = 0;
+		f64 total_ms = 0.0;
+		f64 max_ms = 0.0;
 	};
 
 	static std::atomic<bool> profiler_enabled = false;
