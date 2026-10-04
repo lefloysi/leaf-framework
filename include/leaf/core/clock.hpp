@@ -4,7 +4,7 @@
 
 namespace lf {
 	struct Clock {
-		frequency frequency;
+		lf::frequency frequency;
 		bool paused = false;
 	};
 } // namespace lf
