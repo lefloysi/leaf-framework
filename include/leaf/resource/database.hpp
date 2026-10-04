@@ -80,7 +80,7 @@ namespace lf {
 	template<typename T>
 	error Database<T>::load_assets() {
 		for (T& prototype : prototypes) {
-			if (error result{ prototype.load() }) {
+			if (error result = prototype.load()) {
 				return result;
 			}
 		}
@@ -122,6 +122,9 @@ namespace lf {
 			return result;
 		}
 		if constexpr (bin::readable_byte_stream<Stream>) {
+			if constexpr (requires { prototype_type::migrate_name(string_view(name)); }) {
+				name = prototype_type::migrate_name(name);
+			}
 			id = name.empty() ? id_type{} : Database<prototype_type>::find(name);
 			if (!name.empty() && !id) {
 				return error(generic_errc::parse_error, lf::format("save requires missing {} prototype '{}'", Database<prototype_type>::type(), name));

@@ -7,6 +7,7 @@
 #include "leaf/core/vector.hpp"
 #include "leaf/graphics/graphics_program.hpp"
 #include "leaf/graphics/resource.hpp"
+#include "leaf/manager/asset.hpp"
 
 #include <RmlUi/Core/RenderInterface.h>
 
@@ -58,6 +59,7 @@ namespace lf {
 		};
 
 		struct TextureData {
+			asset::image_view prepared;
 			rt::unique<rt::texture> image;
 			rt::unique<rt::texture_view> view;
 			rt::unique<rt::sampler> sampler;

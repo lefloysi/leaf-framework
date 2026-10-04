@@ -12,7 +12,7 @@ namespace lf::tests {
 		REQUIRE(root.parent_path() == std::filesystem::current_path());
 		auto storage{ fs::native_volume(root, fs::native_volume_options{ fs::access_mode::read_write, fs::missing_action::create }) };
 		REQUIRE(storage);
-		scope_exit cleanup{ [&] { std::error_code error; std::filesystem::remove_all(root, error); } };
+		scope_exit cleanup([&] { std::error_code error; std::filesystem::remove_all(root, error); });
 		auto setup{ fs::mount("/test-setup", *storage) };
 		REQUIRE(setup);
 		REQUIRE(fs::create_directories("/test-setup/install/data"));
@@ -21,7 +21,7 @@ namespace lf::tests {
 		const vector<u08> user{ 'u', 's', 'e', 'r' };
 		REQUIRE(fs::write_all("/test-setup/install/data/value", installed));
 		REQUIRE_FALSE(fs::init(root / "install", root / "appdata"));
-		scope_exit shutdown{ fs::exit };
+		scope_exit shutdown(fs::exit);
 		REQUIRE(fs::read_all("/data/value") == installed);
 		const auto entries{ fs::list("/data") };
 		REQUIRE(entries);

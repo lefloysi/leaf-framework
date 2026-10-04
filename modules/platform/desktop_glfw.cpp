@@ -3,6 +3,7 @@
 #include "leaf/application/window.hpp"
 #include "leaf/core/exception.hpp"
 #include "leaf/core/logging.hpp"
+#include "leaf/core/singleton.hpp"
 #include "leaf/graphics/resource.hpp"
 
 #define GLFW_INCLUDE_NONE
@@ -13,11 +14,154 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <cassert>
+#include <deque>
+#include <exception>
+#include <future>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <thread>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
-static lf::PlatformWindow* from_glfw(GLFWwindow* wnd) { return reinterpret_cast<lf::PlatformWindow*>(wnd); }
-static GLFWwindow* to_glfw(lf::PlatformWindow* wnd) { return reinterpret_cast<GLFWwindow*>(wnd); }
-static lf::Window* owner(GLFWwindow* wnd) { return static_cast<lf::Window*>(glfwGetWindowUserPointer(wnd)); }
+namespace lf {
+	struct PlatformWindow {
+		GLFWwindow* native = nullptr;
+		Window* owner = nullptr;
+		mutable std::mutex state_mutex;
+		dim2<u32> size{};
+		dim2<u32> framebuffer_size{};
+		pos2<i32> position{};
+		bool visible = false;
+		bool iconified = false;
+		bool should_close = false;
+	};
+
+	struct PlatformCursor {
+		GLFWcursor* native = nullptr;
+	};
+
+	class Platform : public Singleton<Platform> {
+	  public:
+		void initialize() {
+			owner_thread = std::this_thread::get_id();
+		}
+
+		bool owns_current_thread() const {
+			return std::this_thread::get_id() == owner_thread;
+		}
+
+		template <typename Function>
+		auto invoke(Function&& function) -> std::invoke_result_t<Function> {
+			using Result = std::invoke_result_t<Function>;
+			if (owns_current_thread()) {
+				if constexpr (std::is_void_v<Result>) {
+					function();
+					return;
+				} else {
+					return function();
+				}
+			}
+
+			auto task = std::make_shared<std::packaged_task<Result()>>(std::forward<Function>(function));
+			auto result = task->get_future();
+			{
+				std::lock_guard lock(request_mutex);
+				requests.emplace_back([task] { (*task)(); });
+			}
+			glfwPostEmptyEvent();
+			if constexpr (std::is_void_v<Result>) {
+				result.get();
+			} else {
+				return result.get();
+			}
+		}
+
+		void run(const std::function<void()>& application) {
+			assert(owns_current_thread());
+			std::exception_ptr exception;
+			std::atomic<bool> running = true;
+			std::thread worker = std::thread([&] {
+				try {
+					application();
+				} catch (...) {
+					exception = std::current_exception();
+				}
+				running.store(false, std::memory_order_release);
+				glfwPostEmptyEvent();
+			});
+
+			while (running.load(std::memory_order_acquire)) {
+				glfwWaitEvents();
+				drain();
+			}
+			drain();
+			worker.join();
+			if (exception) {
+				std::rethrow_exception(exception);
+			}
+		}
+
+		bool update() {
+			if (owns_current_thread()) {
+				glfwWaitEvents();
+				drain();
+			}
+			return true;
+		}
+
+	  private:
+		friend Singleton<Platform>;
+
+		void drain() {
+			std::deque<std::function<void()>> pending;
+			{
+				std::lock_guard lock(request_mutex);
+				pending.swap(requests);
+			}
+			for (const std::function<void()>& request : pending) {
+				request();
+			}
+		}
+
+		std::thread::id owner_thread;
+		std::mutex request_mutex;
+		std::deque<std::function<void()>> requests;
+	};
+} // namespace lf
+
+namespace {
+	lf::PlatformWindow* from_glfw(GLFWwindow* wnd) { return static_cast<lf::PlatformWindow*>(glfwGetWindowUserPointer(wnd)); }
+	GLFWwindow* to_glfw(lf::PlatformWindow* wnd) { return wnd ? wnd->native : nullptr; }
+	lf::Window* owner(GLFWwindow* wnd) {
+		lf::PlatformWindow* platform_window = from_glfw(wnd);
+		return platform_window ? platform_window->owner : nullptr;
+	}
+
+	void update_window_size(GLFWwindow* wnd, int width, int height) {
+		if (lf::PlatformWindow* window = from_glfw(wnd)) {
+			std::lock_guard lock(window->state_mutex);
+			window->size = { static_cast<u32>(std::max(width, 0)), static_cast<u32>(std::max(height, 0)) };
+		}
+	}
+
+	void update_framebuffer_size(GLFWwindow* wnd, int width, int height) {
+		if (lf::PlatformWindow* window = from_glfw(wnd)) {
+			std::lock_guard lock(window->state_mutex);
+			window->framebuffer_size = { static_cast<u32>(std::max(width, 0)), static_cast<u32>(std::max(height, 0)) };
+		}
+	}
+
+	void update_window_position(GLFWwindow* wnd, int x, int y) {
+		if (lf::PlatformWindow* window = from_glfw(wnd)) {
+			std::lock_guard lock(window->state_mutex);
+			window->position = { x, y };
+		}
+	}
+} // namespace
 
 static lf::input_key input_key_from_glfw(int key) {
 	if (key >= GLFW_KEY_A && key <= GLFW_KEY_Z) {
@@ -171,10 +315,33 @@ static void scroll_callback(GLFWwindow* wnd, double x, double y) {
 }
 
 static void close_callback(GLFWwindow* wnd) {
+	if (lf::PlatformWindow* window = from_glfw(wnd)) {
+		std::lock_guard lock(window->state_mutex);
+		window->should_close = true;
+	}
 	if (lf::Window* window = owner(wnd)) {
 		window->set_should_close(true);
 	} else {
 		glfwHideWindow(wnd);
+	}
+}
+
+static void window_size_callback(GLFWwindow* wnd, int width, int height) {
+	update_window_size(wnd, width, height);
+}
+
+static void framebuffer_size_callback(GLFWwindow* wnd, int width, int height) {
+	update_framebuffer_size(wnd, width, height);
+}
+
+static void window_position_callback(GLFWwindow* wnd, int x, int y) {
+	update_window_position(wnd, x, y);
+}
+
+static void window_iconify_callback(GLFWwindow* wnd, int iconified) {
+	if (lf::PlatformWindow* window = from_glfw(wnd)) {
+		std::lock_guard lock(window->state_mutex);
+		window->iconified = iconified == GLFW_TRUE;
 	}
 }
 
@@ -197,201 +364,245 @@ static void drop_callback(GLFWwindow* wnd, int count, const char** paths) {
 namespace lf {
 	error init_platform(span<string_view> args) {
 		log::Info("[leaf] Starting platform...");
+		Platform::instance().initialize();
 		if (!glfwInit()) {
-			// TODO
-			// to_error whatever();
 			return error::unknown_error;
 		}
 		return error::no_error;
 	}
+
 	void exit_platform() {
-		glfwTerminate();
+		Platform::instance().invoke([] { glfwTerminate(); });
 	}
+
+	void run_platform(const std::function<void()>& application) {
+		Platform::instance().run(application);
+	}
+
 	string_view platform_backend_name() {
 		return "GLFW";
 	}
 
 	PlatformWindow* create_platform_window(const PlatformWindowCreateInfo& info) {
-		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-		glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+		return Platform::instance().invoke([info] {
+			glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+			glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
 
-		GLFWwindow* wnd = glfwCreateWindow(static_cast<i32>(info.width), static_cast<i32>(info.height), info.title.data(), nullptr, nullptr);
-		if (!wnd) {
-			// TODO
-			// throw_glfw_error();
-			throw lf::runtime_exception("failed to create GLFW window");
-		}
-
-		return from_glfw(wnd);
+			auto* window = new PlatformWindow;
+			window->native = glfwCreateWindow(static_cast<i32>(info.width), static_cast<i32>(info.height), info.title.data(), nullptr, nullptr);
+			if (!window->native) {
+				delete window;
+				throw runtime_exception("failed to create GLFW window");
+			}
+			glfwSetWindowUserPointer(window->native, window);
+			int width = 0;
+			int height = 0;
+			glfwGetWindowSize(window->native, &width, &height);
+			window->size = { static_cast<u32>(std::max(width, 0)), static_cast<u32>(std::max(height, 0)) };
+			glfwGetFramebufferSize(window->native, &width, &height);
+			window->framebuffer_size = { static_cast<u32>(std::max(width, 0)), static_cast<u32>(std::max(height, 0)) };
+			glfwGetWindowPos(window->native, &width, &height);
+			window->position = { width, height };
+			return window;
+		});
 	}
 
 	void destroy_platform_window(PlatformWindow* wnd) {
-		glfwSetWindowCloseCallback(to_glfw(wnd), nullptr);
-		glfwSetMouseButtonCallback(to_glfw(wnd), nullptr);
-		glfwSetKeyCallback(to_glfw(wnd), nullptr);
-		glfwSetCharCallback(to_glfw(wnd), nullptr);
-		glfwSetCursorPosCallback(to_glfw(wnd), nullptr);
-		glfwSetCursorEnterCallback(to_glfw(wnd), nullptr);
-		glfwSetScrollCallback(to_glfw(wnd), nullptr);
-		glfwSetWindowFocusCallback(to_glfw(wnd), nullptr);
-		glfwSetDropCallback(to_glfw(wnd), nullptr);
-		glfwSetWindowUserPointer(to_glfw(wnd), nullptr);
-		glfwDestroyWindow(to_glfw(wnd));
+		Platform::instance().invoke([wnd] {
+			GLFWwindow* native = to_glfw(wnd);
+			if (!native) {
+				return;
+			}
+			glfwSetWindowCloseCallback(native, nullptr);
+			glfwSetWindowSizeCallback(native, nullptr);
+			glfwSetFramebufferSizeCallback(native, nullptr);
+			glfwSetWindowPosCallback(native, nullptr);
+			glfwSetWindowIconifyCallback(native, nullptr);
+			glfwSetMouseButtonCallback(native, nullptr);
+			glfwSetKeyCallback(native, nullptr);
+			glfwSetCharCallback(native, nullptr);
+			glfwSetCursorPosCallback(native, nullptr);
+			glfwSetCursorEnterCallback(native, nullptr);
+			glfwSetScrollCallback(native, nullptr);
+			glfwSetWindowFocusCallback(native, nullptr);
+			glfwSetDropCallback(native, nullptr);
+			glfwSetWindowUserPointer(native, nullptr);
+			glfwDestroyWindow(native);
+			delete wnd;
+		});
 	}
 
 	void bind_platform_window_swapchain(PlatformWindow* wnd, rt::view<rt::swapchain> swapchain) {
-		rtSwapchainBindGLFW(swapchain, to_glfw(wnd));
-		rt::detail::check_rutile_error("failed to bind GLFW wnd to swapchain");
+		Platform::instance().invoke([wnd, swapchain] {
+			rtSwapchainBindGLFW(swapchain, to_glfw(wnd));
+			rt::detail::check_rutile_error("failed to bind GLFW wnd to swapchain");
+		});
 	}
 
 	void platform_window_owner(PlatformWindow* wnd, Window* owner) {
-		if (!wnd) {
-			return;
-		}
-		glfwSetWindowUserPointer(to_glfw(wnd), owner);
-		glfwSetWindowCloseCallback(to_glfw(wnd), close_callback);
-		glfwSetMouseButtonCallback(to_glfw(wnd), mouse_button_callback);
-		glfwSetKeyCallback(to_glfw(wnd), key_callback);
-		glfwSetCharCallback(to_glfw(wnd), char_callback);
-		glfwSetCursorPosCallback(to_glfw(wnd), cursor_position_callback);
-		glfwSetCursorEnterCallback(to_glfw(wnd), cursor_enter_callback);
-		glfwSetScrollCallback(to_glfw(wnd), scroll_callback);
-		glfwSetWindowFocusCallback(to_glfw(wnd), focus_callback);
-		glfwSetDropCallback(to_glfw(wnd), drop_callback);
+		Platform::instance().invoke([wnd, owner] {
+			if (!wnd) {
+				return;
+			}
+			wnd->owner = owner;
+			GLFWwindow* native = to_glfw(wnd);
+			glfwSetWindowCloseCallback(native, close_callback);
+			glfwSetWindowSizeCallback(native, window_size_callback);
+			glfwSetFramebufferSizeCallback(native, framebuffer_size_callback);
+			glfwSetWindowPosCallback(native, window_position_callback);
+			glfwSetWindowIconifyCallback(native, window_iconify_callback);
+			glfwSetMouseButtonCallback(native, mouse_button_callback);
+			glfwSetKeyCallback(native, key_callback);
+			glfwSetCharCallback(native, char_callback);
+			glfwSetCursorPosCallback(native, cursor_position_callback);
+			glfwSetCursorEnterCallback(native, cursor_enter_callback);
+			glfwSetScrollCallback(native, scroll_callback);
+			glfwSetWindowFocusCallback(native, focus_callback);
+			glfwSetDropCallback(native, drop_callback);
+		});
 	}
 
 	void platform_window_clear_owner(PlatformWindow* wnd) {
-		if (!wnd) {
-			return;
-		}
-		glfwSetWindowUserPointer(to_glfw(wnd), nullptr);
+		Platform::instance().invoke([wnd] {
+			if (wnd) {
+				wnd->owner = nullptr;
+			}
+		});
 	}
 
 	void platform_window_title(PlatformWindow* wnd, string_view title) {
-		glfwSetWindowTitle(to_glfw(wnd), title.data());
+		string owned_title = string(title);
+		Platform::instance().invoke([wnd, title = std::move(owned_title)] { glfwSetWindowTitle(to_glfw(wnd), title.c_str()); });
 	}
 
 	void platform_window_show(PlatformWindow* wnd) {
-		glfwShowWindow(to_glfw(wnd));
+		Platform::instance().invoke([wnd] {
+			glfwShowWindow(to_glfw(wnd));
+			std::lock_guard lock(wnd->state_mutex);
+			wnd->visible = true;
+		});
 	}
 
 	void platform_window_hide(PlatformWindow* wnd) {
-		glfwHideWindow(to_glfw(wnd));
+		Platform::instance().invoke([wnd] {
+			glfwHideWindow(to_glfw(wnd));
+			std::lock_guard lock(wnd->state_mutex);
+			wnd->visible = false;
+		});
 	}
 
 	void platform_window_size(PlatformWindow* wnd, dim2<u32> size) {
-		glfwSetWindowSize(to_glfw(wnd), static_cast<i32>(size.width), static_cast<i32>(size.height));
+		Platform::instance().invoke([wnd, size] { glfwSetWindowSize(to_glfw(wnd), static_cast<i32>(size.width), static_cast<i32>(size.height)); });
 	}
 
 	dim2<u32> platform_window_size(PlatformWindow* wnd) {
-		int width = 0;
-		int height = 0;
-		glfwGetWindowSize(to_glfw(wnd), &width, &height);
-		return { static_cast<u32>(width), static_cast<u32>(height) };
+		std::lock_guard lock(wnd->state_mutex);
+		return wnd->size;
 	}
 
 	dim2<u32> platform_framebuffer_size(PlatformWindow* wnd) {
-		int width = 0;
-		int height = 0;
-		glfwGetFramebufferSize(to_glfw(wnd), &width, &height);
-		return { static_cast<u32>(width), static_cast<u32>(height) };
+		std::lock_guard lock(wnd->state_mutex);
+		return wnd->framebuffer_size;
 	}
 
 	bool platform_window_drawable(PlatformWindow* wnd) {
-		GLFWwindow* glfw_window = to_glfw(wnd);
-		if (glfwWindowShouldClose(glfw_window) || glfwGetWindowAttrib(glfw_window, GLFW_VISIBLE) == GLFW_FALSE || glfwGetWindowAttrib(glfw_window, GLFW_ICONIFIED) == GLFW_TRUE) {
-			return false;
-		}
-
-		int width = 0;
-		int height = 0;
-		glfwGetFramebufferSize(glfw_window, &width, &height);
-		return width > 0 && height > 0;
+		std::lock_guard lock(wnd->state_mutex);
+		return !wnd->should_close && wnd->visible && !wnd->iconified && wnd->framebuffer_size.width > 0 && wnd->framebuffer_size.height > 0;
 	}
 
 	void platform_window_position(PlatformWindow* wnd, pos2<i32> position) {
-		glfwSetWindowPos(to_glfw(wnd), position.x, position.y);
+		Platform::instance().invoke([wnd, position] { glfwSetWindowPos(to_glfw(wnd), position.x, position.y); });
 	}
 
 	pos2<i32> platform_window_position(PlatformWindow* wnd) {
-		int x = 0;
-		int y = 0;
-		glfwGetWindowPos(to_glfw(wnd), &x, &y);
-		return { static_cast<i32>(x), static_cast<i32>(y) };
+		std::lock_guard lock(wnd->state_mutex);
+		return wnd->position;
 	}
 
 	void platform_window_fullscreen(PlatformWindow* wnd, bool fullscreen, pos2<i32> windowed_position, dim2<u32> windowed_size) {
-		GLFWwindow* window = to_glfw(wnd);
-		if (fullscreen) {
-			GLFWmonitor* monitor = glfwGetPrimaryMonitor();
-			if (!monitor) {
+		Platform::instance().invoke([wnd, fullscreen, windowed_position, windowed_size] {
+			GLFWwindow* window = to_glfw(wnd);
+			if (fullscreen) {
+				GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+				if (!monitor) {
+					return;
+				}
+				const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+				if (!mode) {
+					return;
+				}
+				int monitor_x = 0;
+				int monitor_y = 0;
+				glfwGetMonitorPos(monitor, &monitor_x, &monitor_y);
+				glfwSetWindowAttrib(window, GLFW_DECORATED, GLFW_FALSE);
+				glfwSetWindowAttrib(window, GLFW_RESIZABLE, GLFW_FALSE);
+				glfwSetWindowAttrib(window, GLFW_FLOATING, GLFW_FALSE);
+				glfwSetWindowMonitor(window, nullptr, monitor_x, monitor_y, mode->width, mode->height, GLFW_DONT_CARE);
+				glfwFocusWindow(window);
 				return;
 			}
-			const GLFWvidmode* mode = glfwGetVideoMode(monitor);
-			if (!mode) {
-				return;
-			}
-			int monitor_x = 0;
-			int monitor_y = 0;
-			glfwGetMonitorPos(monitor, &monitor_x, &monitor_y);
-			glfwSetWindowAttrib(window, GLFW_DECORATED, GLFW_FALSE);
-			glfwSetWindowAttrib(window, GLFW_RESIZABLE, GLFW_FALSE);
-			glfwSetWindowAttrib(window, GLFW_FLOATING, GLFW_FALSE);
-			glfwSetWindowMonitor(window, nullptr, monitor_x, monitor_y, mode->width, mode->height, GLFW_DONT_CARE);
-			glfwFocusWindow(window);
-			return;
-		}
 
-		glfwSetWindowAttrib(window, GLFW_FLOATING, GLFW_FALSE);
-		glfwSetWindowMonitor(
-			window,
-			nullptr,
-			windowed_position.x,
-			windowed_position.y,
-			static_cast<int>(windowed_size.width),
-			static_cast<int>(windowed_size.height),
-			GLFW_DONT_CARE
-		);
-		glfwSetWindowAttrib(window, GLFW_DECORATED, GLFW_TRUE);
-		glfwSetWindowAttrib(window, GLFW_RESIZABLE, GLFW_TRUE);
+			glfwSetWindowAttrib(window, GLFW_FLOATING, GLFW_FALSE);
+			glfwSetWindowMonitor(window, nullptr, windowed_position.x, windowed_position.y, static_cast<int>(windowed_size.width), static_cast<int>(windowed_size.height), GLFW_DONT_CARE);
+			glfwSetWindowAttrib(window, GLFW_DECORATED, GLFW_TRUE);
+			glfwSetWindowAttrib(window, GLFW_RESIZABLE, GLFW_TRUE);
+		});
 	}
 
 	bool platform_window_should_close(PlatformWindow* wnd) {
-		return glfwWindowShouldClose(to_glfw(wnd));
+		std::lock_guard lock(wnd->state_mutex);
+		return wnd->should_close;
 	}
 
 	void platform_window_should_close(PlatformWindow* wnd, bool should_close) {
-		glfwSetWindowShouldClose(to_glfw(wnd), should_close ? GLFW_TRUE : GLFW_FALSE);
+		Platform::instance().invoke([wnd, should_close] {
+			glfwSetWindowShouldClose(to_glfw(wnd), should_close ? GLFW_TRUE : GLFW_FALSE);
+			std::lock_guard lock(wnd->state_mutex);
+			wnd->should_close = should_close;
+		});
 	}
 
 	PlatformCursor* create_platform_cursor(const u08* rgba, u32 width, u32 height, u32 hotspot_x, u32 hotspot_y) {
-		GLFWimage image;
-		image.width = static_cast<int>(width);
-		image.height = static_cast<int>(height);
-		image.pixels = const_cast<unsigned char*>(rgba);
-		return reinterpret_cast<PlatformCursor*>(glfwCreateCursor(&image, static_cast<int>(hotspot_x), static_cast<int>(hotspot_y)));
+		return Platform::instance().invoke([rgba, width, height, hotspot_x, hotspot_y] {
+			GLFWimage image;
+			image.width = static_cast<int>(width);
+			image.height = static_cast<int>(height);
+			image.pixels = const_cast<unsigned char*>(rgba);
+			auto* cursor = new PlatformCursor;
+			cursor->native = glfwCreateCursor(&image, static_cast<int>(hotspot_x), static_cast<int>(hotspot_y));
+			if (!cursor->native) {
+				delete cursor;
+				return static_cast<PlatformCursor*>(nullptr);
+			}
+			return cursor;
+		});
 	}
 
 	void destroy_platform_cursor(PlatformCursor* cursor) {
-		if (cursor) {
-			glfwDestroyCursor(reinterpret_cast<GLFWcursor*>(cursor));
-		}
+		Platform::instance().invoke([cursor] {
+			if (cursor) {
+				glfwDestroyCursor(cursor->native);
+				delete cursor;
+			}
+		});
 	}
 
 	void platform_window_cursor(PlatformWindow* wnd, PlatformCursor* cursor) {
-		glfwSetCursor(to_glfw(wnd), reinterpret_cast<GLFWcursor*>(cursor));
+		Platform::instance().invoke([wnd, cursor] { glfwSetCursor(to_glfw(wnd), cursor ? cursor->native : nullptr); });
 	}
 
 	bool update_platform() {
-		glfwWaitEventsTimeout(1.0 / 120.0);
-		return true;
+		return Platform::instance().update();
 	}
 	void platform_clipboard_text(string_view text) {
-		glfwSetClipboardString(nullptr, text.data());
+		string owned_text = string(text);
+		Platform::instance().invoke([text = std::move(owned_text)] { glfwSetClipboardString(nullptr, text.c_str()); });
 	}
 
 	string platform_clipboard_text() {
-		const char* text = glfwGetClipboardString(nullptr);
-		return text ? string(text) : string();
+		return Platform::instance().invoke([] {
+			const char* text = glfwGetClipboardString(nullptr);
+			return text ? string(text) : string();
+		});
 	}
 } // namespace lf

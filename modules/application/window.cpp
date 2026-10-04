@@ -179,10 +179,19 @@ namespace lf {
 		rt::Timepoint::Wait(rt::Queue::Submit(queue, commands));
 	}
 
+	void Window::set_frame_rate(frequency limit) {
+		frame_period = limit.in_hertz().quantum_count().raw() > 0 ? limit.period() : timespan();
+		next_frame = timespan();
+	}
+
 	rt::view<rt::command_buffer> Window::begin_frame() {
 		LF_PROFILE_SCOPE("frame.acquire-and-reset");
 		discard_frame();
 		if (!drawable()) { return {}; }
+		if (frame_period > timespan()) {
+			sleep_until(next_frame);
+			next_frame = now() + frame_period;
+		}
 		const dim2<u32> actual_framebuffer_size = platform_framebuffer_size(platform);
 		if (framebuffer_extent.width != actual_framebuffer_size.width || framebuffer_extent.height != actual_framebuffer_size.height) {
 			rt::Swapchain::Resize(swapchain, actual_framebuffer_size.width, actual_framebuffer_size.height);
@@ -227,7 +236,7 @@ namespace lf {
 			frame_rendered = rt::Queue::Submit(queue, frame_command_buffer);
 		}
 		frame_submitted = true;
-		asset::submitted(frame_rendered);
+		asset::submitted(frame_command_buffer, frame_rendered);
 		{
 			LF_PROFILE_SCOPE("frame.present");
 			rt::Swapchain::Present(swapchain, frame_rendered);

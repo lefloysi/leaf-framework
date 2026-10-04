@@ -1,8 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <leaf/core/dynamic_object.hpp>
 #include <leaf/core/time.hpp>
 
 #include <chrono>
+#include <limits>
 #include <type_traits>
 
 TEST_CASE("timespan preserves elapsed-time arithmetic") {
@@ -21,6 +23,13 @@ TEST_CASE("frequency preserves integral and fractional hertz values") {
 	REQUIRE(integral.in_hertz().quantum_count().raw() == 60 * lf::fixed::scale);
 	REQUIRE(lf::frequency{ lf::hertz{ 2.5 } }.in_hertz().as_f64() == 2.5);
 	REQUIRE(lf::hertz::from_raw(2'500'000'000).quantum_count().raw() == 2'500'000'000);
+}
+
+TEST_CASE("dynamic fixed values preserve exact and numeric prototype values") {
+	REQUIRE(lf::object{ "0.05" }.parse<lf::fixed>().raw() == 50'000'000);
+	REQUIRE(lf::object{ 0.125 }.parse<lf::fixed>().raw() == 125'000'000);
+	REQUIRE(lf::object{ -3 }.parse<lf::fixed>().raw() == -3 * lf::fixed::scale);
+	REQUIRE_THROWS(lf::object{ std::numeric_limits<f64>::infinity() }.parse<lf::fixed>());
 }
 
 TEST_CASE("frequency periods preserve session timing") {

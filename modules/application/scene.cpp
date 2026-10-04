@@ -235,7 +235,7 @@ namespace lf {
 		if (!context) {
 			throw runtime_exception("failed to create RML scene context");
 		}
-		scope_exit rollback{ [this] { Rml::RemoveContext(context->GetName()); } };
+		scope_exit rollback([this] { Rml::RemoveContext(context->GetName()); });
 		if (auto err = Register<Scene>::install(*this); err) {
 			throw runtime_exception(err.message);
 		}
@@ -266,6 +266,7 @@ namespace lf {
 			rml_document->AddEventListener(event, this);
 		}
 		rml_document->Show();
+		refresh_keybinds();
 	}
 
 	void Scene::set_rml(const char* source, usize size) {
@@ -317,7 +318,35 @@ namespace lf {
 		}
 	}
 
+	void Scene::refresh_keybinds() {
+		std::erase_if(resolved_keybinds, [](const auto& binding) { return !binding.element; });
+		const u64 revision = InputSettingsRevision();
+		Rml::ElementList elements;
+		rml_document->GetElementsByTagName(elements, "keybind");
+		for (Rml::Element* element : elements) {
+			const string mod = element->GetAttribute<Rml::String>("mod", "core");
+			const string action = element->GetAttribute<Rml::String>("action", "");
+			const string key = element->GetAttribute<Rml::String>("key", "");
+			auto found = std::ranges::find_if(resolved_keybinds, [element](const auto& binding) { return binding.element.get() == element; });
+			if (found != resolved_keybinds.end() && found->revision == revision && found->mod == mod && found->action == action && found->key == key) { continue; }
+			KeyBinding binding;
+			binding.element = element->GetObserverPtr();
+			binding.mod = mod;
+			binding.action = action;
+			binding.key = key;
+			binding.resolved_key = key;
+			binding.revision = revision;
+			if (!action.empty()) {
+				const auto setting = LoadInputSetting(mod, action);
+				if (setting) { binding.resolved_key = *setting; }
+			}
+			if (found == resolved_keybinds.end()) { resolved_keybinds.emplace_back(std::move(binding)); }
+			else { *found = std::move(binding); }
+		}
+	}
+
 	void Scene::keybinds(input_key key, bool down) {
+		LF_PROFILE_SCOPE("input.keybinds");
 		if (!down) {
 			auto held = held_keybinds;
 			std::erase_if(held_keybinds, [key](const auto& binding) { return binding.first == key; });
@@ -329,9 +358,12 @@ namespace lf {
 		if (std::ranges::any_of(held_keybinds, [key](const auto& binding) { return binding.first == key; })) { return; }
 		Rml::Element* focus = context->GetFocusElement();
 		if (focus && (focus->GetTagName() == "input" || focus->GetTagName() == "textarea" || focus->GetTagName() == "select")) { return; }
-		Rml::ElementList bindings;
-		rml_document->GetElementsByTagName(bindings, "keybind");
-		for (Rml::Element* binding : bindings) {
+		refresh_keybinds();
+		const string name = key_name(key);
+		const auto bindings = resolved_keybinds;
+		for (const auto& resolved : bindings) {
+			Rml::Element* binding = resolved.element.get();
+			if (!binding || binding->GetOwnerDocument() != rml_document || resolved.resolved_key != name) { continue; }
 			Rml::Element* scope = binding->GetParentNode();
 			if (!scope || !scope->IsVisible() || binding->HasAttribute("disabled")) { continue; }
 			bool active = scope == rml_document || scope->HasAttribute("input-fallback");
@@ -339,13 +371,6 @@ namespace lf {
 				active |= ancestor == scope;
 			}
 			if (!active) { continue; }
-			string name = binding->GetAttribute<Rml::String>("key", "");
-			const string action = binding->GetAttribute<Rml::String>("action", "");
-			if (!action.empty()) {
-				auto setting = LoadInputSetting(binding->GetAttribute<Rml::String>("mod", "core"), action);
-				if (setting) { name = *setting; }
-			}
-			if (name != key_name(key)) { continue; }
 			held_keybinds.emplace_back(key, binding->GetObserverPtr());
 			binding->DispatchEvent("keydown", {});
 		}
@@ -488,6 +513,7 @@ namespace lf {
 
 	void Scene::unload_document() {
 		held_keybinds.clear();
+		resolved_keybinds.clear();
 		if (rml_document) {
 			context->UnloadDocument(rml_document);
 		}

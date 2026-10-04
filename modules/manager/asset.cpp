@@ -4,7 +4,10 @@
 #include <bit>
 #include <future>
 #include <leaf/core/thread_pool.hpp>
+#include <leaf/core/scope.hpp>
+#include <leaf/core/time.hpp>
 #include <leaf/graphics/command_buffer.hpp>
+#include <leaf/graphics/queue.hpp>
 #include <leaf/graphics/sampler.hpp>
 #include <leaf/graphics/texture.hpp>
 #include <leaf/graphics/texture_view.hpp>
@@ -39,6 +42,8 @@ namespace lf::asset {
 		rect<u32> allocation{};
 		dim2<u32> size{};
 		vector<rt::timepoint> retirement;
+		rt::view<rt::command_buffer> upload_commands;
+		rt::timepoint uploaded = rt::timepoint();
 	};
 
 	struct shader_record {
@@ -77,6 +82,7 @@ namespace lf::asset {
 	void exit() {
 		workers.reset();
 		std::scoped_lock lock{ records_mutex };
+		for (const rt::timepoint completion : submissions) { rt::Timepoint::Wait(completion); }
 		images.clear();
 		shaders.clear();
 		pages.clear();
@@ -178,6 +184,11 @@ namespace lf::asset {
 		group.progress.emplace(std::move(progress));
 		group.progress->add_total(group.image_declarations.size() + group.shader_declarations.size());
 		group.status = state::loading;
+		if (!workers && (!group.image_declarations.empty() || !group.shader_declarations.empty())) {
+			group.result = error(generic_errc::invalid_state, "asset manager is not initialized");
+			group.status = state::failed;
+			return;
+		}
 
 		for (const auto image : group.image_declarations) {
 			auto* record{ find(image) };
@@ -271,6 +282,7 @@ namespace lf::asset {
 	}
 
 	state poll(group& group) {
+		collect();
 		if (group.progress && group.progress->cancelled()) {
 			unload(group);
 			group.status = state::cancelled;
@@ -306,6 +318,7 @@ namespace lf::asset {
 		}
 
 		if (group.completed_images.size() == group.image_demands.size() && group.completed_shaders.size() == group.shader_demands.size()) {
+			group.progress->set(normalized<u32>(normalized<u32>::maximum));
 			group.status = state::ready;
 		}
 		return group.status;
@@ -313,6 +326,31 @@ namespace lf::asset {
 
 	error failure(const group& group) {
 		return group.result;
+	}
+
+	error prepare(group& group, Progress progress) {
+		scope_exit release_progress = scope_exit([&group] { group.progress.reset(); });
+		load(group, std::move(progress));
+		if (poll(group) == state::ready) { return {}; }
+		if (poll(group) == state::failed) { return failure(group); }
+		if (poll(group) == state::cancelled) { return error(generic_errc::cancelled, "Asset preparation cancelled"); }
+		rt::unique<rt::queue> queue = rt::unique(rt::Queue::Create(rt::queue_capability::graphics));
+		rt::unique<rt::command_buffer> commands = rt::unique(rt::CommandBuffer::Create());
+		while (true) {
+			const state status = poll(group);
+			if (status == state::ready) { return {}; }
+			if (status == state::failed) { return failure(group); }
+			if (status == state::cancelled) { return error(generic_errc::cancelled, "Asset preparation cancelled"); }
+			rt::Cmd::Reset(commands);
+			rt::Cmd::Begin(commands);
+			update(commands, 16);
+			rt::Cmd::End(commands);
+			const rt::timepoint completion = rt::Queue::Submit(queue, commands);
+			submitted(commands, completion);
+			rt::Timepoint::Wait(completion);
+			collect();
+			lf::sleep_for(lf::timespan(1'000'000));
+		}
 	}
 
 	report<decoded_image> decode(image::description description) {
@@ -358,6 +396,11 @@ namespace lf::asset {
 			if (candidate->storage != record.description.storage) {
 				continue;
 			}
+			const bool uploading = std::any_of(images.begin(), images.end(), [&](const auto& other) {
+				return other->page == candidate.get() && other->status == state::loading &&
+					(other->upload_commands.value != commands.value || other->uploaded.value);
+			});
+			if (uploading) { continue; }
 			for (usize index{}; index < candidate->free_regions.size(); ++index) {
 				const auto& region{ candidate->free_regions[index] };
 				if (region.dim.width >= size.width && region.dim.height >= size.height) {
@@ -425,7 +468,7 @@ namespace lf::asset {
 					record->status = state::failed;
 				} else {
 					allocate(*record, *decoded, commands);
-					record->status = state::ready;
+					record->upload_commands = commands;
 				}
 			} catch (const std::exception& error) {
 				record->result = lf::error{ generic_errc::unknown, error.what() };
@@ -445,6 +488,22 @@ namespace lf::asset {
 		return image_view{ page->view, page->sampler, { { (record->allocation.pos.x + 1) / extent, (record->allocation.pos.y + 1) / extent }, { record->size.width / extent, record->size.height / extent } }, record->size };
 	}
 
+	optional<image_view> get(fs::path_view source) {
+		std::scoped_lock lock = std::scoped_lock(records_mutex);
+		const image_record* found = nullptr;
+		for (const auto& record : images) {
+			if (record->description.source.text() != source.text() || record->description.crop || !record->demand || record->status != state::ready) { continue; }
+			found = record.get();
+			if (record->description.storage == lifetime::startup) { break; }
+		}
+		if (!found) { return {}; }
+		const atlas_page& page = *found->page;
+		const f32 extent = static_cast<f32>(page.extent);
+		return image_view(page.view, page.sampler, rect<f32>(
+			pos2<f32>((found->allocation.pos.x + 1) / extent, (found->allocation.pos.y + 1) / extent),
+			dim2<f32>(found->size.width / extent, found->size.height / extent)), found->size);
+	}
+
 	optional<rt::view<rt::program>> get(shader::ID shader) {
 		std::scoped_lock lock{ records_mutex };
 		const auto* record{ find(shader) };
@@ -454,15 +513,27 @@ namespace lf::asset {
 		return record->program;
 	}
 
-	void submitted(rt::timepoint completion) {
+	void submitted(rt::view<rt::command_buffer> commands, rt::timepoint completion) {
 		std::scoped_lock lock{ records_mutex };
 		submissions.push_back(completion);
+		for (const auto& record : images) {
+			if (record->upload_commands.value == commands.value) {
+				record->upload_commands = {};
+				record->uploaded = completion;
+			}
+		}
 	}
 
 	void collect() {
 		std::scoped_lock lock{ records_mutex };
 		std::erase_if(submissions, [](rt::timepoint completion) { return rt::Timepoint::Reached(completion); });
 		for (const auto& record : images) {
+			if (record->upload_commands) { continue; }
+			if (record->uploaded.value) {
+				if (!rt::Timepoint::Reached(record->uploaded)) { continue; }
+				record->uploaded = {};
+				record->status = state::ready;
+			}
 			if (record->demand || !record->page) {
 				continue;
 			}

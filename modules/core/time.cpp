@@ -87,9 +87,9 @@ namespace lf {
 			}
 			return value;
 		}();
-		thread_local const scope_exit release_timer{ [] {
+		thread_local const scope_exit release_timer([] {
 			CloseHandle(timer);
-		} };
+		});
 		while (remaining.quantum_count() > 0) {
 			LARGE_INTEGER due;
 			const i64 nanoseconds = remaining.quantum_count();
@@ -167,3 +167,5 @@ namespace lf {
 		return from_pretty_string<timespan>(value.parse<string>());
 	}
 } // namespace lf
+
+

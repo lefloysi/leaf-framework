@@ -9,6 +9,12 @@
 namespace lf {
 	unique_ptr<RmlBackend> rml_backend;
 
+	RmlElementRegistration::RmlElementRegistration(string_view tag, RmlElementInstancerFactory factory) {
+		Register<RmlBackend>::add([tag = string{ tag }, factory = std::move(factory)](RmlBackend& backend) mutable {
+			return backend.register_element(tag, factory());
+		});
+	}
+
 	error RmlBackend::register_element(string_view tag, unique_ptr<Rml::ElementInstancer> instancer) {
 		if (tag.empty() || !instancer) {
 			return error(generic_errc::invalid_argument, "Rml element registrations require a tag and instancer");

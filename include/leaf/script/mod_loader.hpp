@@ -2,43 +2,40 @@
 
 #include "leaf/core/error.hpp"
 #include "leaf/core/progress.hpp"
-#include "leaf/core/yaml.hpp"
-#include "leaf/script/localization.hpp"
+#include "leaf/core/singleton.hpp"
 #include "leaf/script/mod_info.hpp"
+#include "leaf/manager/asset.hpp"
 
-#include <sol/sol.hpp>
+#include <mutex>
+#include <future>
+#include <thread>
 
 namespace lf {
-	/*!
-	** @ingroup modding
-	** @brief Options produced by the most recent successful mod load, keyed by mod name.
-	*/
-	extern object Options;
-	object sol_to_object(const sol::object& value);
-} // namespace lf
+	struct Mod : Singleton<Mod> {
+	  public:
+		struct Source {
+			fs::path path;
+			bool privileged = false;
+		};
 
-namespace lf::mod {
-	struct Source {
-		fs::path path;
-		bool privileged = false;
+		// async operation
+		static void load(span<const Source> sources);
+		static void unload();
+		static const Progress& progress();
+		static std::future<error> result();
+		static void cancel();
+		static span<ModInfo> loaded();
+
+	  private:
+		friend Singleton<Mod>;
+		~Mod();
+
+		vector<ModInfo> loaded_mods;
+		vector<fs::mapping> mod_mappings;
+		unique_ptr<asset::group> images;
+		Progress loading_progress;
+		std::future<error> loading_result;
+		std::mutex operation_mutex;
+		std::jthread loading_worker;
 	};
-
-	/*!
-	** @ingroup modding
-	** @brief Loads mods from directories in the virtual filesystem.
-	** @return An error if loading fails, or an empty error on success.
-	*/
-	error Load(span<const Source> sources, Progress progress = Progress{});
-
-	/*!
-	** @ingroup modding
-	** @brief Gets the mods from the most recent successful mod load.
-	*/
-	const vector<ModInfo>& Loaded();
-
-	/*!
-	** @ingroup modding
-	** @brief Clears loaded mods and registered prototypes.
-	*/
-	void Unload();
-} // namespace lf::mod
+} // namespace lf

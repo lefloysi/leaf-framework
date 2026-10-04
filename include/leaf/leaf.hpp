@@ -7,9 +7,12 @@
 #include <leaf/application/window.hpp>
 #include <leaf/graphics/resource.hpp>
 #include <leaf/manager/texture_atlas.hpp>
+#include <functional>
 
 namespace lf {
-	error Init(span<string_view> args, string_view application = {});
+	void Init(span<string_view> args, string_view application = {});
+	void Run(const std::function<void()>& application);
 	bool Update();
 	void Exit();
 } // namespace lf
+

@@ -15,5 +15,8 @@ target_link_libraries("leaf-manager"
     PUBLIC
         "leaf::core"
         "leaf::graphics"
+    PRIVATE
+        "leaf::vendor"
 )
+
 

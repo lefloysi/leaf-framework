@@ -24,6 +24,8 @@
 
 namespace lf {
 
+	struct fixed;
+
 	template<typename T>
 	struct object_trait;
 
@@ -358,6 +360,10 @@ namespace lf {
 	template<>
 	struct object_trait<::lf::distance> {
 		static ::lf::distance parse(const object& obj);
+	};
+	template<>
+	struct object_trait<::lf::fixed> {
+		static ::lf::fixed parse(const object& obj);
 	};
 	template<>
 	struct object_trait<u64> {

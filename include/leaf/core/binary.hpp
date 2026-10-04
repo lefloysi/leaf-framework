@@ -1214,22 +1214,22 @@ namespace lf::bin {
 	error process(Stream& stream, padding<Amount>&) { return stream.padding(Amount); }
 
 	template<typename T>
-	report<T> read(span<const lf::byte> bytes, read_options options) {
-		T value{};
-		read_stream stream{ bytes, options.limits };
+	error read(T& value, span<const lf::byte> bytes, read_options options = {}) {
+		read_stream stream(bytes, options.limits);
 		stream.set_progress(std::move(options.progress));
-		if (auto err = stream(lf::field("", value)); err) {
-			return unexpected(err);
-		}
-		if (auto err = stream.refs().resolve(); err) {
-			return unexpected(err);
-		}
+		if (auto err = stream(lf::field("", value)); err) { return err; }
+		if (auto err = stream.refs().resolve(); err) { return err; }
 		if (stream.cursor() != bytes.size()) {
-			return unexpected(error(generic_errc::parse_error, detail::message(stream, "trailing bytes remain")));
+			return error(generic_errc::parse_error, detail::message(stream, "trailing bytes remain"));
 		}
-		return value;
+		return error();
 	}
 	template<typename T>
+	report<T> read(span<const lf::byte> bytes, read_options options) {
+		T value{};
+		if (auto err = read(value, bytes, std::move(options))) { return unexpected(err); }
+		return value;
+	}	template<typename T>
 	report<size_t> measure(const T& value, optional<Progress> progress) {
 		measure_stream stream;
 		stream.set_progress(std::move(progress));
@@ -1264,3 +1264,4 @@ namespace lf::bin {
 constexpr const char* lf::type_name_trait<lf::bin::size>::get() {
 	return "lf::bin::size";
 }
+

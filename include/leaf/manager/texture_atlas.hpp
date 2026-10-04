@@ -38,4 +38,7 @@ namespace lf {
 		vector<packed_atlas_frame> frames;
 	};
 	texture_atlas build_texture_atlas(rt::view<rt::queue> queue, span<const atlas_source_frame> source_frames, texture_atlas_options options = {});
+	texture_atlas& loaded_texture_atlas();
 } // namespace lf
+
+

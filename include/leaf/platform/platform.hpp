@@ -8,6 +8,8 @@
 #include "leaf/core/types.hpp"
 #include "leaf/graphics/resource.hpp"
 
+#include <functional>
+
 namespace lf {
 	class Window;
 	struct PlatformCursor;
@@ -21,6 +23,7 @@ namespace lf {
 
 	error init_platform(span<string_view> args);
 	void exit_platform();
+	void run_platform(const std::function<void()>& application);
 	string_view platform_backend_name();
 
 	PlatformWindow* create_platform_window(const PlatformWindowCreateInfo& info);

@@ -13,16 +13,19 @@ namespace rt {
 
 	void Program::VertexLayout(view<program> program, const vertex_layout& layout) {
 		vector<rt_vertex_input> inputs;
-		vector<vector<rt_vertex_attribute>> attributes;
+		vector<rt_vertex_attribute> attributes;
 		inputs.reserve(layout.inputs.size());
-		attributes.reserve(layout.inputs.size());
+		usize attribute_count = 0;
 		for (const vertex_input& input : layout.inputs) {
-			vector<rt_vertex_attribute>& native_attributes = attributes.emplace_back();
-			native_attributes.reserve(input.attributes.size());
+			attribute_count += input.attributes.size();
+		}
+		attributes.reserve(attribute_count);
+		for (const vertex_input& input : layout.inputs) {
+			const usize offset = attributes.size();
 			for (const vertex_attribute& attribute : input.attributes) {
-				native_attributes.push_back({ attribute.name.c_str(), attribute.offset, static_cast<rt_format>(attribute.format) });
+				attributes.push_back({ attribute.name.c_str(), attribute.offset, static_cast<rt_format>(attribute.format) });
 			}
-			inputs.push_back({ native_attributes.data(), native_attributes.size(), input.stride, static_cast<rt_vertex_rate>(input.rate) });
+			inputs.push_back({ input.attributes.empty() ? nullptr : attributes.data() + offset, input.attributes.size(), input.stride, static_cast<rt_vertex_rate>(input.rate) });
 		}
 		rt_vertex_layout rutile_layout = { inputs.data(), inputs.size() };
 		rtProgramSetLayout(program, &rutile_layout);

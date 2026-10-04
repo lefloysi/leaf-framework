@@ -75,6 +75,7 @@ namespace lf::asset {
 
 	  private:
 		friend void load(group& group, Progress progress);
+		friend error prepare(group& group, Progress progress);
 		friend void unload(group& group);
 		friend state poll(group& group);
 		friend error failure(const group& group);
@@ -97,14 +98,16 @@ namespace lf::asset {
 	report<shader::ID> add(shader::description description);
 
 	void load(group& group, Progress progress);
+	error prepare(group& group, Progress progress);
 	void unload(group& group);
 	state poll(group& group);
 	error failure(const group& group);
 	optional<image_view> get(image::ID image);
+	optional<image_view> get(fs::path_view source);
 	optional<rt::view<rt::program>> get(shader::ID shader);
 
 	void update(rt::view<rt::command_buffer> commands, usize maximum_images = 1);
-	void submitted(rt::timepoint completion);
+	void submitted(rt::view<rt::command_buffer> commands, rt::timepoint completion);
 	void collect();
 	usize resident_pages();
 } // namespace lf::asset

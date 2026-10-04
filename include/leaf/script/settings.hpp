@@ -13,4 +13,5 @@ namespace lf {
 	report<string> LoadInputSetting(string_view mod_name, string_view action);
 	error SaveInputSetting(string_view mod_name, string_view action, string_view key);
 	error EnsureInputSetting(string_view mod_name, string_view action, string_view key);
+	u64 InputSettingsRevision();
 } // namespace lf

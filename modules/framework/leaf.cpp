@@ -3,9 +3,12 @@
 #include "leaf/core/error.hpp"
 #include "leaf/core/filesystem.hpp"
 #include "leaf/core/logging.hpp"
+#include "leaf/core/profiler.hpp"
 #include "leaf/core/scope.hpp"
 #include "leaf/core/span.hpp"
 #include "leaf/core/string.hpp"
+#include "leaf/application/rml.hpp"
+#include "leaf/graphics/graphics.hpp"
 #include "leaf/manager/asset.hpp"
 #include "leaf/platform/platform.hpp"
 #include "leaf/store/lifecycle.hpp"
@@ -15,58 +18,85 @@
 #include <utility>
 
 namespace lf {
-	error Init(span<string_view> args, string_view application) {
-		if (error result{ init_system(args) }) {
-			return result;
+	void Init(span<string_view> args, string_view application) {
+		if (error result = init_system(args)) {
+			throw runtime_exception(result.message);
+		}
+		scope_exit system_cleanup(exit_system);
+
+		if (application.empty()) {
+			application = "leaf-framework";
 		}
 
-		scope_exit system_cleanup{ exit_system };
-		if (!application.empty()) {
-			const auto directory = GetAppdataDir() / fs::native_path{ application };
-			OverwriteAppdataDir(directory.string());
-			if (auto created = fs::native_volume(directory, { fs::access_mode::read_write, fs::missing_action::create }); !created) { return created.error(); }
+		const auto directory = GetAppdataDir() / fs::native_path{ application };
+		OverwriteAppdataDir(directory.string());
+		fs::native_volume(directory, { fs::access_mode::read_write, fs::missing_action::create });
+
+		if (error result = fs::init(GetInstallDir(), GetAppdataDir())) {
+			throw runtime_exception(result.message);
 		}
+		scope_exit filesystem_cleanup(fs::exit);
 
-		if (error result{ fs::init(GetInstallDir(), GetAppdataDir()) }) {
-			return result;
+
+		if (error result = init_store(args)) {
+			throw runtime_exception(result.message);
 		}
+		scope_exit store_cleanup(exit_store);
 
-		scope_exit filesystem_cleanup{ fs::exit };
 
-		if (error result{ init_store(args) }) {
-			return result;
+		if (error result = asset::init(2)) {
+			throw runtime_exception(result.message);
 		}
+		scope_exit assets_cleanup(asset::exit);
 
-		scope_exit store_cleanup{ exit_store };
-
-		if (error result{ asset::init(2) }) {
-			return result;
-		}
-
-		scope_exit assets_cleanup{ asset::exit };
 		PrototypeTypeRegistry::functions.clear();
-		scope_exit registration_cleanup{ [] { PrototypeTypeRegistry::functions.clear(); } };
+		Register<PrototypeTypeRegistry>::install(PrototypeTypeRegistry::instance());
 
-		if (error result{ Register<PrototypeTypeRegistry>::install(PrototypeTypeRegistry::instance()) }) {
-			return result;
+		if (error result = rt::init_graphics(args)) {
+			throw runtime_exception(result.message);
+		}
+		scope_exit graphics_cleanup(rt::exit_graphics);
+
+		if (error result = rt::init_graphics_extensions()) {
+			throw runtime_exception(result.message);
 		}
 
-		registration_cleanup.release();
+		if (error result = init_platform(args)) {
+			throw runtime_exception(result.message);
+		}
+		scope_exit platform_cleanup(exit_platform);
+
+		if (error result = init_rml(args)) {
+			throw runtime_exception(result.message);
+		}
+		scope_exit rml_cleanup(exit_rml);
+
+
+		rml_cleanup.release();
+		platform_cleanup.release();
+		graphics_cleanup.release();
 		assets_cleanup.release();
 		store_cleanup.release();
 		filesystem_cleanup.release();
 		system_cleanup.release();
-		return {};
+	}
+
+	void Run(const std::function<void()>& application) {
+		run_platform(application);
 	}
 
 	bool Update() {
+		LF_PROFILE_SCOPE("frame.update-store");
 		update_store();
 		return update_platform();
 	}
 
 	void Exit() {
-		PrototypeTypeRegistry::functions.clear();
+		exit_rml();
 		asset::exit();
+		exit_platform();
+		rt::exit_graphics();
+		PrototypeTypeRegistry::functions.clear();
 		exit_store();
 		fs::exit();
 		exit_system();

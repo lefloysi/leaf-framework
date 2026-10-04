@@ -36,3 +36,7 @@ catch_discover_tests(leaf-network-tests TEST_PREFIX "leaf::network::")
 add_executable(leaf-binary-tests EXCLUDE_FROM_ALL core/binary.cpp)
 target_link_libraries(leaf-binary-tests PRIVATE leaf::core Catch2::Catch2WithMain)
 catch_discover_tests(leaf-binary-tests TEST_PREFIX "leaf::binary::")
+
+add_executable(leaf-mod-tests EXCLUDE_FROM_ALL script/mod_loader.cpp)
+target_link_libraries(leaf-mod-tests PRIVATE Catch2::Catch2WithMain leaf::core leaf::resource leaf::script leaf::system)
+catch_discover_tests(leaf-mod-tests TEST_PREFIX "leaf::mods::")

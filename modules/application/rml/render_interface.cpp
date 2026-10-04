@@ -112,6 +112,15 @@ namespace lf {
 			log::Warning("{}", lf::format("[rml] invalid texture '{}': {}", source, source_path.error().message));
 			return 0;
 		}
+		if (const auto prepared = asset::get(*source_path)) {
+			textures.emplace_back(make_unique<TextureData>());
+			TextureData& texture = *textures.back();
+			texture.prepared = *prepared;
+			texture.size = prepared->size;
+			texture_dimensions = { static_cast<i32>(texture.size.width), static_cast<i32>(texture.size.height) };
+			return reinterpret_cast<Rml::TextureHandle>(&texture);
+		}
+		LF_PROFILE_SCOPE("ui.load-image");
 		report<vector<u08>> image = fs::read_all(*source_path);
 		if (!image) {
 			log::Warning("{}", lf::format("[rml] failed to load texture '{}': {}", source, image.error().message));
@@ -170,6 +179,7 @@ namespace lf {
 	}
 
 	void Renderer::upload_texture(TextureData& texture_data, const void* pixels) {
+		LF_PROFILE_SCOPE("ui.upload-texture");
 		const usize byte_count = static_cast<usize>(texture_data.size.width) * texture_data.size.height * 4;
 		const u08* source = reinterpret_cast<const u08*>(pixels);
 		texture_data.pixels.assign(source, source + byte_count);
@@ -243,6 +253,11 @@ namespace lf {
 				for (UiVertex vertex : item.geometry->vertices) {
 					vertex.position.x += item.translation.x;
 					vertex.position.y += item.translation.y;
+					if (item.texture->prepared.texture) {
+						const auto& region = item.texture->prepared.region;
+						vertex.uv.x = region.pos.x + vertex.uv.x * region.dim.width;
+						vertex.uv.y = region.pos.y + vertex.uv.y * region.dim.height;
+					}
 					batch_vertices.push_back(vertex);
 				}
 			}
@@ -290,8 +305,8 @@ namespace lf {
 		rt::Cmd::SetScissor(current_command_buffer, scissor_position.x, scissor_position.y, scissor_size.width, scissor_size.height);
 		rt::Cmd::UniformData(current_command_buffer, uniform_location, reinterpret_cast<const u08*>(&uniform), sizeof(uniform));
 		if (bound_texture != texture_data) {
-			rt::Cmd::BindTexture(current_command_buffer, texture_location, texture_data->view);
-			rt::Cmd::BindSampler(current_command_buffer, texture_location, texture_data->sampler);
+			rt::Cmd::BindTexture(current_command_buffer, texture_location, texture_data->prepared.texture ? texture_data->prepared.texture : rt::view<rt::texture_view>(texture_data->view));
+			rt::Cmd::BindSampler(current_command_buffer, texture_location, texture_data->prepared.sampler ? texture_data->prepared.sampler : rt::view<rt::sampler>(texture_data->sampler));
 			bound_texture = texture_data;
 		}
 		rt::Cmd::VertexBuffer(current_command_buffer, vertex_location, draw_vertices, { vertex_bytes, 0 });

@@ -59,3 +59,10 @@ namespace lf {
 		i64 raw_value = 0;
 	};
 } // namespace lf
+
+template<>
+struct lf::type_name_trait<lf::fixed> {
+	static constexpr const char* get() {
+		return "fixed";
+	}
+};

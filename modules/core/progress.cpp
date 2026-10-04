@@ -32,8 +32,11 @@ namespace lf {
 	};
 
 	Progress::Node::~Node() {
+		std::scoped_lock lock(shared->mutex);
+		for (Node* child : active) {
+			child->parent = nullptr;
+		}
 		if (parent) {
-			std::scoped_lock lock(shared->mutex);
 			parent->child_finished(this);
 		}
 	}

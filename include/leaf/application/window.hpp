@@ -4,6 +4,7 @@
 #include <leaf/core/math/dim.hpp>
 #include <leaf/core/math/pos.hpp>
 #include <leaf/core/string.hpp>
+#include <leaf/core/time.hpp>
 #include <leaf/graphics/resource.hpp>
 #include <leaf/resource/prototypes/cursor.hpp>
 
@@ -255,6 +256,7 @@ namespace lf {
 		void set_fullscreen(bool enabled);
 		bool fullscreen() const;
 		void set_vsync(bool enabled);
+		void set_frame_rate(frequency limit);
 		bool set_cursor(CursorPrototype::ID id);
 		bool drawable() const;
 		bool should_close() const;
@@ -297,6 +299,8 @@ namespace lf {
 		rt::view<rt::framebuffer> frame_buffer;
 		rt::timepoint frame_rendered;
 		bool frame_submitted = false;
+		timespan frame_period = timespan();
+		timespan next_frame = timespan();
 
 		dim2<u32> extent = { 1280, 720 };
 		dim2<u32> framebuffer_extent{};

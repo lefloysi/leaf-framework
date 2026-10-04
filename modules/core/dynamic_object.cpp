@@ -1,7 +1,9 @@
 #include "leaf/core/yaml.hpp"
+#include "leaf/core/fixed.hpp"
 
 #include <yaml-cpp/yaml.h>
 
+#include <cmath>
 #include <stdexcept>
 
 namespace lf {
@@ -75,6 +77,37 @@ namespace lf {
 
 	distance object_trait<distance>::parse(const object& obj) {
 		return distance::from_quantum(object_trait<i64>::parse(obj));
+	}
+
+	fixed object_trait<fixed>::parse(const object& obj) {
+		if (obj.is<string>()) {
+			const auto value = fixed::parse(obj.get<string>());
+			if (!value) { throw runtime_exception(value.error().message); }
+			return *value;
+		}
+		if (obj.is<i64>()) {
+			const auto value = fixed::from_integer(obj.get<i64>());
+			if (!value) { throw runtime_exception(value.error().message); }
+			return *value;
+		}
+		if (obj.is<u64>()) {
+			const u64 source = obj.get<u64>();
+			if (source > static_cast<u64>(std::numeric_limits<i64>::max() / fixed::scale)) {
+				throw runtime_exception(lf::format("value {} out of range for fixed", source));
+			}
+			const auto value = fixed::from_integer(static_cast<i64>(source));
+			if (!value) { throw runtime_exception(value.error().message); }
+			return *value;
+		}
+		if (obj.is<f64>()) {
+			const f64 source = obj.get<f64>();
+			const f64 raw = source * static_cast<f64>(fixed::scale);
+			if (!std::isfinite(raw) || raw < static_cast<f64>(std::numeric_limits<i64>::min()) || raw >= static_cast<f64>(std::numeric_limits<i64>::max())) {
+				throw runtime_exception(lf::format("value {} out of range for fixed", source));
+			}
+			return fixed::from_raw(static_cast<i64>(raw));
+		}
+		throw runtime_exception(lf::format("cannot convert type '{}' to fixed", obj.current_type_name()));
 	}
 
 	u64 object_trait<u64>::parse(const object& obj) {

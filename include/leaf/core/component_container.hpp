@@ -258,7 +258,7 @@ namespace lf {
 			((std::get<component_index<Previous>>(components) = std::move(std::get<component_container<Handle, Previous...>::template component_index<Previous>>(previous.components))), ...);
 		}
 
-		entity create(bundle bundle = {}) {
+		entity create() {
 			size_t index;
 			if (free.empty()) {
 				index = slots.size();
@@ -268,15 +268,19 @@ namespace lf {
 				free.pop_back();
 			}
 			slots[index] = {};
-			const Handle handle{ index };
+			return entity{ *this, Handle{ index } };
+		}
+
+		entity create(bundle bundle) {
+			auto result = create();
 			([&] {
 				auto& component = std::get<optional<Component>>(bundle.values);
 				if (component) {
-					add(handle, std::move(*component));
+					add(result.id(), std::move(*component));
 				}
 			}(),
-			 ...);
-			return entity{ *this, handle };
+				 ...);
+			return result;
 		}
 
 		entity get(Handle value) {
@@ -299,6 +303,20 @@ namespace lf {
 		T& emplace(Handle entity) {
 			static_assert(component_index<T> < sizeof...(Component));
 			return add<T>(entity);
+		}
+
+		template<typename T, typename... Argument>
+		requires(sizeof...(Argument) > 0)
+		T& emplace(Handle entity, Argument&&... argument) {
+			static_assert(component_index<T> < sizeof...(Component));
+			auto& [values, owners] = std::get<component_index<T>>(components);
+			size_t& index = slots[entity].components[component_index<T>];
+			if (index != 0) {
+				return values[index];
+			}
+			index = values.size();
+			owners.push_back(entity);
+			return values.emplace_back(std::forward<Argument>(argument)...);
 		}
 
 		void destroy(Handle value) {

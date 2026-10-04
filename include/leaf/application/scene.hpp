@@ -49,6 +49,16 @@ namespace lf {
 	  private:
 		void input(span<const input_event> events);
 		void keybinds(input_key key, bool down);
+		void refresh_keybinds();
+		struct KeyBinding {
+			Rml::ObserverPtr<Rml::Element> element;
+			string mod;
+			string action;
+			string key;
+			string resolved_key;
+			u64 revision = 0;
+		};
+		vector<KeyBinding> resolved_keybinds;
 		vector<std::pair<input_key, Rml::ObserverPtr<Rml::Element>>> held_keybinds;
 
 		void ProcessEvent(Rml::Event& event) override;

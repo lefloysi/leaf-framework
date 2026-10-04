@@ -8,7 +8,7 @@
 TEST_CASE("Channel preserves messages through loss, duplication and reordering", "[network]") {
 	using namespace lf;
 	REQUIRE_FALSE(sys::init_udp_sockets());
-	scope_exit cleanup{ sys::exit_udp_sockets };
+	scope_exit cleanup(sys::exit_udp_sockets);
 	auto left_socket = net::Socket::Port(41480);
 	auto right_socket = net::Socket::Port(41481);
 	auto relay = net::Socket::Port(41482);
@@ -81,7 +81,7 @@ TEST_CASE("Channel preserves messages through loss, duplication and reordering",
 TEST_CASE("Remote connection timeout exposes elapsed progress", "[network]") {
 	using namespace lf;
 	REQUIRE_FALSE(sys::init_udp_sockets());
-	scope_exit cleanup{ sys::exit_udp_sockets };
+	scope_exit cleanup(sys::exit_udp_sockets);
 	lockstep::RemoteSession remote{ net::Socket::Port(0), net::Peer::Address("127.0.0.1", 41483), { .connect_timeout = timespan::from_quantum(50'000'000) } };
 	remote.set_login_payload({});
 	const auto deadline = now() + timespan::from_quantum(500'000'000);
@@ -103,7 +103,7 @@ TEST_CASE("Remote connection timeout exposes elapsed progress", "[network]") {
 TEST_CASE("Join acceptance precedes slow snapshot preparation and loading", "[network]") {
 	using namespace lf;
 	REQUIRE_FALSE(sys::init_udp_sockets());
-	scope_exit cleanup{ sys::exit_udp_sockets };
+	scope_exit cleanup(sys::exit_udp_sockets);
 	lockstep::HostSession host{ net::Socket::Port(41484), { .connect_timeout = timespan::from_quantum(50'000'000) } };
 	lockstep::RemoteSession remote{ net::Socket::Port(0), net::Peer::Address("127.0.0.1", 41484), { .connect_timeout = timespan::from_quantum(50'000'000) } };
 	remote.set_login_payload({});

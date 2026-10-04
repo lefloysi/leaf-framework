@@ -52,7 +52,7 @@ namespace lf {
 	inline error LoadAssetPrototypes() {
 		for (const PrototypeTypeFunctions& functions : PrototypeTypeRegistry::functions) {
 			if (functions.load_assets) {
-				if (error result{ functions.load_assets() }) {
+				if (error result = functions.load_assets()) {
 					return result;
 				}
 			}
