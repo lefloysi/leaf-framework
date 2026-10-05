@@ -91,16 +91,17 @@ namespace lf {
 		if (!result && section == "input") { ++input_settings_revision; }
 		return result;
 	}
-	error prepare_texture_atlas(texture_atlas& atlas, Progress progress) {
-		auto frames = vector<atlas_source_frame>();
-		for (const auto& texture : Database<TexturePrototype>::prototypes) {
+		error prepare_texture_atlas(texture_atlas& atlas, Progress progress) {
+		LF_PROFILE_SCOPE("startup.texture-atlas");
+		vector<atlas_source_frame> frames;
+		for (const TexturePrototype& texture : Database<TexturePrototype>::prototypes) {
 			for (usize frame_index = 0; frame_index < texture.frames.size(); ++frame_index) {
-				const auto& frame = texture.frames[frame_index];
+				const TextureFramePrototype& frame = Database<TextureFramePrototype>::get(texture.frames[frame_index]);
 				frames.push_back({
 					.texture_index = static_cast<u32>(texture.id),
 					.frame_index = static_cast<u32>(frame_index),
-					.path = frame.path.empty() ? texture.path : frame.path,
-					.rect = frame.rect.value_or(rect<u32>{})
+					.path = frame.path,
+					.rect = frame.rect
 				});
 			}
 		}
@@ -445,6 +446,38 @@ namespace lf {
 				if (!prototype.get<sol::object>("mod").valid()) { prototype["mod"] = lua["__leaf_current_mod"]; }
 				const auto type = prototype.get<string>("type");
 				const auto name = prototype.get<string>("name");
+				if (type == TexturePrototype::type()) {
+					const sol::object frame_object = prototype.get<sol::object>("frames");
+					if (frame_object.get_type() != sol::type::nil) {
+						if (!frame_object.is<sol::table>()) { throw runtime_exception(lf::format("texture '{}/{}' frames must be a table", type, name)); }
+
+						sol::table frames = frame_object.as<sol::table>();
+						sol::table frame_table = raw.get<sol::table>(TextureFramePrototype::type());
+						for (usize frame_index = 1; frame_index <= frames.size(); ++frame_index) {
+							const string frame_name = lf::format("{}-{}", name, frame_index);
+							if (frame_table.get<sol::object>(frame_name).valid()) { throw runtime_exception(lf::format("duplicate prototype '{}/{}'", TextureFramePrototype::type(), frame_name)); }
+
+							sol::table frame = lua.create_table();
+							frame["type"] = TextureFramePrototype::type();
+							frame["name"] = frame_name;
+							frame["mod"] = prototype["mod"];
+
+							const sol::object source = frames.get<sol::object>(frame_index);
+							if (source.is<string>()) {
+								frame["path"] = source.as<string>();
+							} else if (source.is<sol::table>()) {
+								sol::table source_frame = source.as<sol::table>();
+								frame["path"] = source_frame.get<string>("path");
+								frame["rect"] = source_frame.get<sol::object>("rect");
+							} else {
+								throw runtime_exception(lf::format("texture '{}/{}' frame {} is not a source path", type, name, frame_index));
+							}
+
+							frame_table[frame_name] = frame;
+							frames[frame_index] = frame_name;
+						}
+					}
+				}
 				const auto table = raw.get<sol::object>(type);
 				if (!table.is<sol::table>()) { throw runtime_exception(lf::format("data.raw[{}] does not exist", type)); }
 				auto entries = table.as<sol::table>();
@@ -805,23 +838,22 @@ namespace lf {
 		return error::no_error;
 	}
 
-	void clear(vector<ModInfo>& mods, vector<fs::mapping>& mappings, texture_atlas& atlas, unique_ptr<asset::group>& images) {
+	void clear(vector<ModInfo>& mods, vector<fs::mapping>& mappings, texture_atlas& atlas) {
 		++input_settings_revision;
-		images.reset();
 		atlas = texture_atlas();
 		for (const auto& type : PrototypeTypeRegistry::functions) { type.clear(); }
 		ClearLocalization();
 		mappings.clear();
 		mods.clear();
 	}
-	error load_sources(span<const Mod::Source> sources, vector<ModInfo>& loaded_mods, vector<fs::mapping>& mod_mappings, texture_atlas& atlas, unique_ptr<asset::group>& images, Progress progress) {
-#define CANCELLED_ERROR error(generic_errc::cancelled, "startup cancelled")
+	error load_sources(span<const Mod::Source> sources, vector<ModInfo>& loaded_mods, vector<fs::mapping>& mod_mappings, texture_atlas& atlas, Progress progress) {
+		#define RETURN_IF_CANCELLED if (progress.cancelled()) { return error(generic_errc::cancelled, "startup cancelled"); }
 
 		log::Info("{}", "[mod-loader] loading mods");
-		clear(loaded_mods, mod_mappings, atlas, images);
-		scope_exit rollback = scope_exit([&] { clear(loaded_mods, mod_mappings, atlas, images); });
-		auto options = object(dict());
-		auto startup_settings = dict();
+		clear(loaded_mods, mod_mappings, atlas);
+		scope_exit rollback = scope_exit([&] { clear(loaded_mods, mod_mappings, atlas); });
+		object options = object(dict());
+		dict startup_settings;
 		log::Debug("{}", lf::format("[mod-loader] reset runtime state: prototype_types={}", PrototypeTypeRegistry::functions.size()));
 
 		progress.add("Discovering mods");
@@ -831,16 +863,12 @@ namespace lf {
 		progress.add("Preparing loaded content", 95);
 		Progress phase = progress();
 		phase.add_total(3);
-		if (progress.cancelled()) {
-			return CANCELLED_ERROR;
-		}
+		RETURN_IF_CANCELLED
 
-		auto mods = vector<ModInfo>();
+		vector<ModInfo> mods;
 		for (const Mod::Source& source : sources) {
-			if (progress.cancelled()) {
-				return CANCELLED_ERROR;
-			}
-			auto entries = fs::list(source.path);
+			RETURN_IF_CANCELLED
+			report<vector<fs::directory_entry>> entries = fs::list(source.path);
 			if (!entries) {
 				return entries.error().add_context(lf::format("discovering mods in '{}'", source.path.text()));
 			}
@@ -848,9 +876,7 @@ namespace lf {
 				if (entry.status().type() != fs::node_type::directory) {
 					continue;
 				}
-				if (progress.cancelled()) {
-					return CANCELLED_ERROR;
-				}
+				RETURN_IF_CANCELLED
 				const auto mod_dir = source.path.append(entry.name());
 				auto directory = fs::open_volume(mod_dir);
 				if (!directory) { return directory.error(); }
@@ -875,18 +901,14 @@ namespace lf {
 				mods.emplace_back(std::move(info));
 			}
 		}
-		if (progress.cancelled()) {
-			return CANCELLED_ERROR;
-		}
+		RETURN_IF_CANCELLED
 		log::Info("{}", lf::format("[mod-loader] discovered {} mod(s): {}", mods.size(), mod_names_to_string(mods)));
 
 		phase.advance();
-		if (progress.cancelled()) {
-			return CANCELLED_ERROR;
-		}
+		RETURN_IF_CANCELLED
 		fs::path enabled_mods_path("/enabled_mods.yaml");
 		if (const auto error = sync_enabled_mods(enabled_mods_path, mods)) { return error; }
-		auto enabled_mods = load_enabled_mods(enabled_mods_path);
+		std::unordered_map<string, ModEnabledInfo> enabled_mods = load_enabled_mods(enabled_mods_path);
 		log::Debug("{}", lf::format("[mod-loader] enabled mods file={} entries={}", enabled_mods_path.text(), enabled_mods.size()));
 		if (const auto status = fs::status(enabled_mods_path); !status) { return status.error(); }
 		if (const auto created = fs::create_directories("/settings"); !created) { return created.error(); }
@@ -907,22 +929,16 @@ namespace lf {
 			mod.location = destination;
 		}
 
-		auto enabled_mod_list = vector<ModInfo>();
-		for (const auto& mod : mods) {
-			auto it = enabled_mods.find(mod.name);
-			if (it != enabled_mods.end() && it->second.enabled) {
-				log::Debug("{}", lf::format("[mod-loader] selected: {} v{} enabled=true", mod.name, version_to_string(mod.mod_version)));
-				enabled_mod_list.emplace_back(mod);
-			} else {
-				log::Debug("{}", lf::format("[mod-loader] selected: {} v{} enabled=false", mod.name, version_to_string(mod.mod_version)));
-			}
+		vector<ModInfo> enabled_mod_list;
+		for (const ModInfo& mod : mods) {
+			const auto it = enabled_mods.find(mod.name);
+			if (it == enabled_mods.end() || !it->second.enabled) { continue; }
+			enabled_mod_list.emplace_back(mod);
 		}
 		log::Info("{}", lf::format("[mod-loader] enabled {} mod(s): {}", enabled_mod_list.size(), mod_names_to_string(enabled_mod_list)));
 
 		phase.advance();
-		if (progress.cancelled()) {
-			return CANCELLED_ERROR;
-		}
+		RETURN_IF_CANCELLED
 		error sort_result = sort_mods_by_dependency(enabled_mod_list);
 		if (sort_result) {
 			return sort_result;
@@ -931,9 +947,7 @@ namespace lf {
 
 		log::Info("{}", "[mod-loader] load order:");
 		for (usize i = 0; i < enabled_mod_list.size(); ++i) {
-			if (progress.cancelled()) {
-				return CANCELLED_ERROR;
-			}
+			RETURN_IF_CANCELLED
 			const auto& mod = enabled_mod_list[i];
 			log::Info("{}", lf::format("[mod-loader]   {}. \"{}\" v{}", i + 1, mod.name, version_to_string(mod.mod_version)));
 		}
@@ -947,9 +961,7 @@ namespace lf {
 		phase = progress();
 		phase.add_total(2);
 		phase.advance();
-		if (progress.cancelled()) {
-			return CANCELLED_ERROR;
-		}
+		RETURN_IF_CANCELLED
 		log::Debug("{}", "[mod-loader] loading mod settings");
 		if (error settings_err = sync_loaded_mod_settings(enabled_mod_list, startup_settings)) {
 			return settings_err.add_context("syncing mod settings");
@@ -959,9 +971,7 @@ namespace lf {
 
 		phase = progress();
 		phase.add_total(1);
-		if (progress.cancelled()) {
-			return CANCELLED_ERROR;
-		}
+		RETURN_IF_CANCELLED
 		log::Info("{}", lf::format("[mod-loader] loading locale: {}", selected_language));
 		error locale_error = LoadLocaleFiles(span<const ModInfo>(enabled_mod_list.data(), enabled_mod_list.size()), selected_language);
 		if (locale_error) {
@@ -976,9 +986,7 @@ namespace lf {
 
 		log::Info("{}", "[mod-loader] loading data scripts");
 		for (usize i = 0; i < enabled_mod_list.size(); ++i) {
-			if (progress.cancelled()) {
-				return CANCELLED_ERROR;
-			}
+			RETURN_IF_CANCELLED
 			const auto& mod = enabled_mod_list[i];
 			lua["option"] = lua.create_table();
 			lua["option"]["scene"] = lua.create_table();
@@ -992,14 +1000,10 @@ namespace lf {
 			phase.advance();
 		}
 
-		if (progress.cancelled()) {
-			return CANCELLED_ERROR;
-		}
+		RETURN_IF_CANCELLED
 		log::Debug("{}", "[mod-loader] loaded mod options");
 		loaded_mods = enabled_mod_list;
-		if (progress.cancelled()) {
-			return CANCELLED_ERROR;
-		}
+		RETURN_IF_CANCELLED
 		log::Info("{}", "[mod-loader] creating prototypes from data.raw");
 		auto err = LoadDataRaw(lua);
 		if (err) {
@@ -1010,39 +1014,11 @@ namespace lf {
 
 		phase = progress();
 		phase.add("Preparing textures");
-		phase.add("Preparing interface images");
 		if (error texture_error = prepare_texture_atlas(atlas, phase())) {
 			return texture_error.add_context("building texture atlas from loaded mods");
 		}
-		images = make_unique<asset::group>();
-		if (error image_error = Register<asset::group>::install(*images)) { return image_error; }
-		vector<fs::path> directories;
-		for (const auto& mod : loaded_mods) {
-			fs::path icons = fs::path("/" + mod.name + "/assets/icons");
-			if (fs::exists(icons)) { directories.emplace_back(std::move(icons)); }
-		}
-		while (!directories.empty()) {
-			if (progress.cancelled()) { return CANCELLED_ERROR; }
-			fs::path directory = std::move(directories.back());
-			directories.pop_back();
-			const auto entries = fs::list(directory);
-			if (!entries) { return entries.error(); }
-			for (const auto& entry : *entries) {
-				fs::path path = directory.append(entry.name());
-				if (entry.status().type() == fs::node_type::directory) {
-					directories.emplace_back(std::move(path));
-					continue;
-				}
-				string name = string(entry.name());
-				for (auto& character : name) { if (character >= 'A' && character <= 'Z') { character += 'a' - 'A'; } }
-				if (name.ends_with(".png") || name.ends_with(".jpg") || name.ends_with(".jpeg") || name.ends_with(".bmp") || name.ends_with(".tga") || name.ends_with(".gif")) {
-					images->include(asset::add({ .source = std::move(path), .storage = asset::lifetime::startup }));
-				}
-			}
-		}
-		if (error image_error = asset::prepare(*images, phase())) { return image_error.add_context("preparing interface images"); }
-		if (progress.cancelled()) { return CANCELLED_ERROR; }
-#undef CANCELLED_ERROR
+		RETURN_IF_CANCELLED
+		#undef RETURN_IF_CANCELLED
 		rollback.release();
 		return error::no_error;
 	}
@@ -1055,6 +1031,7 @@ namespace lf {
 		auto owned_sources = vector<Source>(sources.begin(), sources.end());
 		self.loading_progress = Progress("Loading mods");
 		self.loading_progress.add("Loading mods");
+
 		auto promise = std::promise<error>();
 		self.loading_result = promise.get_future();
 		self.loading_worker = std::jthread([&self, sources = std::move(owned_sources), progress = self.loading_progress(), promise = std::move(promise)](std::stop_token stop) mutable {
@@ -1065,7 +1042,7 @@ namespace lf {
 				// callbacks only finalize the loaded databases.
 				progress.add("Loading content", 99);
 				progress.add("Initializing loaded content");
-				status = load_sources(sources, self.loaded_mods, self.mod_mappings, loaded_texture_atlas(), self.images, progress());
+				status = load_sources(sources, self.loaded_mods, self.mod_mappings, loaded_texture_atlas(), progress());
 				if (!status && stop.stop_requested()) { status = error(generic_errc::cancelled, "Mod loading cancelled"); }
 				if (!status) {
 					Progress initialization = progress();
@@ -1073,7 +1050,7 @@ namespace lf {
 				}
 				if (!status && stop.stop_requested()) { status = error(generic_errc::cancelled, "Mod loading cancelled"); }
 			} catch (...) { status = current_exception_error("Loading mods"); }
-			if (status) { clear(self.loaded_mods, self.mod_mappings, loaded_texture_atlas(), self.images); }
+			if (status) { clear(self.loaded_mods, self.mod_mappings, loaded_texture_atlas()); }
 			progress = Progress();
 			promise.set_value(std::move(status));
 		});
@@ -1101,7 +1078,7 @@ namespace lf {
 		auto lock = std::scoped_lock(self.operation_mutex);
 		self.loading_worker.request_stop();
 		if (self.loading_worker.joinable()) { self.loading_worker.join(); }
-		clear(self.loaded_mods, self.mod_mappings, loaded_texture_atlas(), self.images);
+		clear(self.loaded_mods, self.mod_mappings, loaded_texture_atlas());
 	}
 
 	span<ModInfo> Mod::loaded() { return instance().loaded_mods; }

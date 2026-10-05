@@ -1,40 +1,34 @@
 #include "leaf/resource/prototypes/texture.hpp"
+#include "leaf/core/filesystem.hpp"
 
 namespace lf {
+	TextureFramePrototype::TextureFramePrototype(const dict& data)
+		: Prototype<identifier<TextureFramePrototype, u16, void>>{ data } {
+		data.assign(schema(*this));
+	}
+
+	error TextureFramePrototype::load() {
+		const auto source = fs::path::parse(path);
+		if (!source) {
+			return source.error();
+		}
+		return {};
+	}
+
 	TexturePrototype::TexturePrototype(const dict& data)
 		: Prototype<identifier<TexturePrototype, u16, void>>{ data } {
 		data.assign(schema(*this));
 
-		if (frames.empty()) {
-			frames.push_back({ .path = path });
-		}
 	}
 
 	TexturePrototype::~TexturePrototype() = default;
 
 	error TexturePrototype::load() {
-		images.clear();
-
-		for (const TextureSourceFrame& frame : frames) {
-			const auto source{ fs::path::parse(frame.path) };
-
-			if (!source) {
-				return source.error();
+		for (TextureFramePrototype::ID frame : frames) {
+			if (!frame) {
+				return error{ generic_errc::invalid_id, "texture references a missing frame" };
 			}
-
-			images.push_back(asset::add({
-				.source = *source,
-				.crop = frame.rect,
-				.storage = storage,
-			}));
 		}
-
 		return {};
-	}
-
-	void TexturePrototype::include(asset::group& group) const {
-		for (const auto image : images) {
-			group.include(image);
-		}
 	}
 } // namespace lf

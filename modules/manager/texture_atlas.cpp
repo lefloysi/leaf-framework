@@ -71,12 +71,10 @@ namespace lf {
 
 	using stbi_image = std::unique_ptr<stbi_uc, decltype(&stbi_image_free)>;
 
-	vector<atlas_frame> inspect_frames(span<const atlas_source_frame> sources, texture_atlas_options& options) {
+	vector<atlas_frame> inspect_frames(span<const atlas_source_frame> sources, const texture_atlas_options& options, Progress& progress) {
 		vector<atlas_frame> frames;
 		frames.reserve(sources.size());
-		if (options.progress) {
-			options.progress->add_total(static_cast<u64>(sources.size()));
-		}
+		progress.add_total(static_cast<u64>(sources.size()));
 		std::unordered_map<string, std::pair<int, int>> extent;
 		std::unordered_map<string, std::shared_ptr<const vector<byte>>> source_bytes;
 		extent.reserve(sources.size());
@@ -84,9 +82,7 @@ namespace lf {
 		for (size_t i = 0; i < sources.size(); ++i) {
 			const atlas_source_frame& source = sources[i];
 			if (source.path.empty()) {
-				if (options.progress) {
-					options.progress->advance();
-				}
+				progress.advance();
 				continue;
 			}
 
@@ -95,25 +91,19 @@ namespace lf {
 				report<fs::path> source_path = fs::path::parse(source.path);
 				if (!source_path) {
 					log::Warning("[textures] invalid texture frame '{}': {}", source.path, source_path.error().message);
-					if (options.progress) {
-						options.progress->advance();
-					}
+					progress.advance();
 					continue;
 				}
 				report<vector<u08>> bytes = fs::read_all(*source_path);
 				if (!bytes) {
 					log::Warning("[textures] failed to load texture frame '{}': {}", source.path, bytes.error().message);
-					if (options.progress) {
-						options.progress->advance();
-					}
+					progress.advance();
 					continue;
 				}
 				bytes_it->second = std::make_shared<const vector<byte>>(reinterpret_cast<const byte*>(bytes->data()), reinterpret_cast<const byte*>(bytes->data()) + bytes->size());
 			}
 			if (!bytes_it->second) {
-				if (options.progress) {
-					options.progress->advance();
-				}
+				progress.advance();
 				continue;
 			}
 
@@ -128,9 +118,7 @@ namespace lf {
 			const int image_height = dimension_it->second.second;
 			if (image_width <= 0 || image_height <= 0) {
 				log::Warning("[textures] missing texture frame '{}'", source.path);
-				if (options.progress) {
-					options.progress->advance();
-				}
+				progress.advance();
 				continue;
 			}
 
@@ -155,9 +143,7 @@ namespace lf {
 				frame.source.dim = { std::max<u32>(1u, safe_cast<u32>(std::lround(source.rect.dim.width * scale))), std::max<u32>(1u, safe_cast<u32>(std::lround(source.rect.dim.height * scale))) };
 				frames.emplace_back(std::move(frame));
 			}
-			if (options.progress) {
-				options.progress->advance();
-			}
+			progress.advance();
 		}
 		return frames;
 	}
@@ -275,7 +261,7 @@ namespace lf {
 	}
 
 	packed_atlas_frame packed_frame_from(const atlas_frame& frame, u32 atlas_width, u32 atlas_height, u32 padding) {
-		return { .texture_index = frame.texture_index, .frame_index = frame.frame_index, .rect = { .pos = { .x = safe_cast<f32>(frame.destination.x + safe_cast<i32>(padding)) / safe_cast<f32>(atlas_width), .y = safe_cast<f32>(frame.destination.y + safe_cast<i32>(padding)) / safe_cast<f32>(atlas_height) }, .dim = { .width = safe_cast<f32>(frame.source.dim.width) / safe_cast<f32>(atlas_width), .height = safe_cast<f32>(frame.source.dim.height) / safe_cast<f32>(atlas_height) } } };
+		return { .texture_index = frame.texture_index, .frame_index = frame.frame_index, .rect = { .pos = { .x = safe_cast<f32>(frame.destination.x + safe_cast<i32>(padding)) / safe_cast<f32>(atlas_width), .y = safe_cast<f32>(frame.destination.y + safe_cast<i32>(padding)) / safe_cast<f32>(atlas_height) }, .dim = { .width = safe_cast<f32>(frame.source.dim.width) / safe_cast<f32>(atlas_width), .height = safe_cast<f32>(frame.source.dim.height) / safe_cast<f32>(atlas_height) } }, .size = frame.source.dim };
 	}
 
 	usize atlas_frame_upload_bytes(
@@ -317,15 +303,7 @@ namespace lf {
 			const u32 end_x = std::min(atlas_size.width, safe_cast<u32>((u64(base_position.x + base_size.width) + scale - 1u) / scale));
 			const u32 end_y = std::min(atlas_size.height, safe_cast<u32>((u64(base_position.y + base_size.height) + scale - 1u) / scale));
 			const dim2<u32> mip_size{ end_x - mip_position.x, end_y - mip_position.y };
-			const rt::texture_range range{
-				rt::texture_aspect_flag::color,
-				level,
-				1,
-				0,
-				1,
-				{ mip_size.width, mip_size.height, 1 },
-				{ mip_position.x, mip_position.y, 0 }
-			};
+			const rt::texture_range range{ rt::texture_aspect_flag::color, level, 1, 0, 1, { mip_size.width, mip_size.height, 1 }, { mip_position.x, mip_position.y, 0 } };
 			rt::Cmd::TextureData(commands, atlas_texture, range, prepared.pixels.data() + prepared.mip_offsets[level]);
 		}
 	}
@@ -402,31 +380,52 @@ namespace lf {
 		return result;
 	}
 
-	texture_atlas build_texture_atlas(rt::view<rt::queue> queue, span<const atlas_source_frame> source_frames, texture_atlas_options setup) {
-		texture_atlas_options options{ .padding = setup.padding, .max_frame_extent = setup.max_frame_extent, .smooth = setup.smooth, .mip_levels = setup.mip_levels };
-		if (setup.progress) {
-			// Relative costs measured with the bundled textures; individual files
-			// and frames still advance these phases as their work completes.
-			setup.progress->add("Reading texture files", 20);
-			setup.progress->add("Arranging textures");
-			setup.progress->add("Preparing atlas texture pixels", 78);
-			setup.progress->add("Uploading texture atlas");
-			options.progress.emplace((*setup.progress)());
-		}
+	texture_atlas build_texture_atlas(rt::view<rt::queue> queue, span<const atlas_source_frame> source_frames, texture_atlas_options options) {
 		const auto build_start = std::chrono::steady_clock::now();
 		texture_atlas atlas;
-		vector<atlas_frame> frames = inspect_frames(source_frames, options);
+		options.progress.add("Reading texture files");
+		options.progress.add("Arranging textures");
+		options.progress.add("Preparing atlas pixels");
+		options.progress.add("Finalizing texture atlas");
+
+		vector<atlas_frame> frames;
+		{
+			Progress reading = options.progress();
+			frames = inspect_frames(source_frames, options, reading);
+		}
+
 		const auto inspect_done = std::chrono::steady_clock::now();
+
 		u32 max_frame_width = 0;
 		u32 max_frame_height = 0;
 		for (const atlas_frame& frame : frames) {
 			max_frame_width = std::max(max_frame_width, frame.source.dim.width);
 			max_frame_height = std::max(max_frame_height, frame.source.dim.height);
 		}
+
 		log::Info("[textures] atlas inspect: {} valid frames max={}x{} in {:.3f}s", frames.size(), max_frame_width, max_frame_height, std::chrono::duration<f64>(inspect_done - build_start).count());
 
-		if (setup.progress) { options.progress.emplace((*setup.progress)()); }
-		packed_atlas_layout layout = pack_frames(frames, options);
+		packed_atlas_layout layout;
+		u32 levels = 1;
+		rt::unique<rt::command_buffer> upload_commands;
+		{
+			Progress arranging = options.progress();
+			layout = pack_frames(frames, options);
+
+			atlas.atlas_texture = rt::unique(rt::Texture::Create());
+
+			// Keep at least one padding texel at the coarsest atlas level.
+			while (levels < options.mip_levels && (1u << levels) <= options.padding && (layout.width >> levels) && (layout.height >> levels)) {
+				++levels;
+			}
+			rt::Texture::Resize(atlas.atlas_texture, rt::texture_type::d2, rt::format::rgba8_unorm, { layout.width, layout.height, 1 }, levels);
+
+			upload_commands = rt::unique(rt::CommandBuffer::Create());
+			rt::Cmd::Begin(upload_commands);
+			arranging.add_total(1);
+			arranging.advance();
+		}
+
 		const auto pack_done = std::chrono::steady_clock::now();
 		log::Info("[textures] atlas pack: {}x{} in {:.3f}s", layout.width, layout.height, std::chrono::duration<f64>(pack_done - inspect_done).count());
 
@@ -435,6 +434,8 @@ namespace lf {
 		for (size_t i = 0; i < frames.size(); ++i) {
 			upload_order.emplace_back(i);
 		}
+
+		// Decode each source image once for all of its frames.
 		std::sort(upload_order.begin(), upload_order.end(), [&](size_t a, size_t b) {
 			return frames[a].path < frames[b].path;
 		});
@@ -454,97 +455,96 @@ namespace lf {
 			first = last;
 		}
 
-		atlas.atlas_texture = rt::unique{ rt::Texture::Create() };
-		// Keep at least one padding texel at the coarsest atlas level.
-		u32 levels = 1;
-		while (levels < options.mip_levels && (1u << levels) <= options.padding && (layout.width >> levels) && (layout.height >> levels)) {
-			++levels;
-		}
-		rt::Texture::Resize(atlas.atlas_texture, rt::texture_type::d2, rt::format::rgba8_unorm, { layout.width, layout.height, 1 }, levels);
-		rt::unique<rt::command_buffer> upload_commands(rt::CommandBuffer::Create());
-		rt::Cmd::Begin(upload_commands);
 		usize upload_batch_bytes = 0;
 		usize upload_batch_count = 0;
 		usize prepared_pixel_bytes = 0;
+
 		auto submit_upload_batch = [&] {
 			if (!upload_batch_bytes) {
 				return;
 			}
+
 			rt::Cmd::End(upload_commands);
 			rt::Timepoint::Wait(rt::Queue::Submit(queue, upload_commands));
 			++upload_batch_count;
 		};
 
-		if (options.progress) {
-			options.progress.emplace((*setup.progress)());
-			options.progress->add_total(static_cast<u64>(frames.size()));
-		}
 		const unsigned worker_count = std::clamp(std::thread::hardware_concurrency(), 1u, max_texture_pixel_workers);
-		ThreadPool pixel_workers = ThreadPool(worker_count);
-		vector<std::future<prepared_atlas_group>> prepared_groups;
-		const auto prepare_group = [&](usize index) {
-			return pixel_workers.submit([&frames, &upload_order, layout, padding = options.padding, levels, group = upload_groups[index]] {
-				return prepare_atlas_group(frames, upload_order, group, layout, padding, levels);
-			});
-		};
-		const usize pending_count = std::min<usize>(worker_count, upload_groups.size());
-		prepared_groups.reserve(pending_count);
-		for (usize index = 0; index < pending_count; ++index) {
-			prepared_groups.emplace_back(prepare_group(index));
-		}
-		for (usize index = 0; index < upload_groups.size(); ++index) {
-			prepared_atlas_group prepared_group = prepared_groups[index % pending_count].get();
-			if (index + pending_count < upload_groups.size()) {
-				prepared_groups[index % pending_count] = prepare_group(index + pending_count);
+		{
+			Progress preparation = options.progress();
+			preparation.add_total(static_cast<u64>(frames.size()));
+
+			ThreadPool pixel_workers = ThreadPool(worker_count);
+			vector<std::future<prepared_atlas_group>> prepared_groups;
+
+			const auto prepare_group = [&](usize index) {
+				return pixel_workers.submit([&frames, &upload_order, layout, padding = options.padding, levels, group = upload_groups[index]] {
+					return prepare_atlas_group(frames, upload_order, group, layout, padding, levels);
+				});
+			};
+
+			const usize pending_count = std::min<usize>(worker_count, upload_groups.size());
+			prepared_groups.reserve(pending_count);
+			for (usize index = 0; index < pending_count; ++index) {
+				prepared_groups.emplace_back(prepare_group(index));
 			}
-			for (const prepared_atlas_frame& prepared : prepared_group.frames) {
-				const atlas_frame& frame = frames[prepared.frame_index];
-				const usize frame_upload_bytes = prepared.pixels.size();
-				if (upload_batch_bytes && upload_batch_bytes + frame_upload_bytes > atlas_upload_batch_byte_limit) {
-					submit_upload_batch();
-					rt::Cmd::Reset(upload_commands);
-					rt::Cmd::Begin(upload_commands);
-					upload_batch_bytes = 0;
+
+			for (usize index = 0; index < upload_groups.size(); ++index) {
+				prepared_atlas_group prepared_group = prepared_groups[index % pending_count].get();
+
+				if (index + pending_count < upload_groups.size()) {
+					// Start the next decode before this group's upload.
+					prepared_groups[index % pending_count] = prepare_group(index + pending_count);
 				}
-				upload_prepared_frame_to_atlas(upload_commands, atlas.atlas_texture, layout, frame, prepared, options.padding, levels);
-				upload_batch_bytes += frame_upload_bytes;
-				prepared_pixel_bytes += frame_upload_bytes;
-				if (options.progress) {
-					options.progress->advance();
+
+				for (const prepared_atlas_frame& prepared : prepared_group.frames) {
+					const atlas_frame& frame = frames[prepared.frame_index];
+					const usize frame_upload_bytes = prepared.pixels.size();
+
+					if (upload_batch_bytes && upload_batch_bytes + frame_upload_bytes > atlas_upload_batch_byte_limit) {
+						submit_upload_batch();
+						rt::Cmd::Reset(upload_commands);
+						rt::Cmd::Begin(upload_commands);
+						upload_batch_bytes = 0;
+					}
+
+					upload_prepared_frame_to_atlas(upload_commands, atlas.atlas_texture, layout, frame, prepared, options.padding, levels);
+					upload_batch_bytes += frame_upload_bytes;
+					prepared_pixel_bytes += frame_upload_bytes;
+					preparation.advance();
 				}
-			}
-			if (options.progress && prepared_group.skipped_frames) {
-				options.progress->advance(static_cast<u64>(prepared_group.skipped_frames));
+
+				preparation.advance(static_cast<u64>(prepared_group.skipped_frames));
 			}
 		}
+
 		const auto decode_done = std::chrono::steady_clock::now();
 		log::Info("[textures] atlas pixel preparation: {} files, {} frames, {:.1f} MiB across {} workers in {:.3f}s", upload_groups.size(), frames.size(), static_cast<f64>(prepared_pixel_bytes) / (1024.0 * 1024.0), worker_count, std::chrono::duration<f64>(decode_done - pack_done).count());
 
-		if (setup.progress) { options.progress.emplace((*setup.progress)()); }
-		if (upload_batch_bytes) {
-			const rt::texture_range atlas_range{
-				rt::texture_aspect_flag::color,
-				0,
-				levels,
-				0,
-				1,
-				{ layout.width, layout.height, 1 },
-				{}
-			};
-			rt::Cmd::TextureBarrier(upload_commands, atlas.atlas_texture, atlas_range, { rt::stage_flag::transfer, rt::access_type::write }, { rt::stage_flag::fragment, rt::access_type::read });
-			submit_upload_batch();
+		{
+			Progress finalizing = options.progress();
+			finalizing.add_total(1);
+			if (upload_batch_bytes) {
+				const rt::texture_range atlas_range{ rt::texture_aspect_flag::color, 0, levels, 0, 1, { layout.width, layout.height, 1 }, {} };
+				rt::Cmd::TextureBarrier(upload_commands, atlas.atlas_texture, atlas_range, { rt::stage_flag::transfer, rt::access_type::write }, { rt::stage_flag::fragment, rt::access_type::read });
+				submit_upload_batch();
+			}
+
+			for (const atlas_frame& frame : frames) {
+				atlas.frames.emplace_back(packed_frame_from(frame, layout.width, layout.height, options.padding));
+			}
+
+			atlas.view = rt::unique(rt::TextureView::CreateFromTexture(atlas.atlas_texture));
+			atlas.sampler = rt::unique(rt::Sampler::Create());
+
+			rt::Sampler::SetFilter(atlas.sampler, options.smooth ? rt::filter::linear : rt::filter::nearest, options.smooth ? rt::filter::linear : rt::filter::nearest, levels > 1 ? rt::mip_filter::linear : rt::mip_filter::none);
+			rt::Sampler::SetAddress(atlas.sampler, rt::address_mode::clamp, rt::address_mode::clamp, rt::address_mode::clamp);
+			finalizing.advance();
 		}
+
 		const auto upload_done = std::chrono::steady_clock::now();
 		log::Info("[textures] atlas GPU upload: {} bounded batches in {:.3f}s", upload_batch_count, std::chrono::duration<f64>(upload_done - decode_done).count());
 
-		for (const atlas_frame& frame : frames) {
-			atlas.frames.emplace_back(packed_frame_from(frame, layout.width, layout.height, options.padding));
-		}
-
-		atlas.view = rt::unique(rt::TextureView::CreateFromTexture(atlas.atlas_texture));
-		atlas.sampler = rt::unique(rt::Sampler::Create());
-		rt::Sampler::SetFilter(atlas.sampler, options.smooth ? rt::filter::linear : rt::filter::nearest, options.smooth ? rt::filter::linear : rt::filter::nearest, levels > 1 ? rt::mip_filter::linear : rt::mip_filter::none);
-		rt::Sampler::SetAddress(atlas.sampler, rt::address_mode::clamp, rt::address_mode::clamp, rt::address_mode::clamp);
 		const auto view_done = std::chrono::steady_clock::now();
 		log::Info("[textures] atlas view/finalize: {:.3f}s, total {:.3f}s", std::chrono::duration<f64>(view_done - upload_done).count(), std::chrono::duration<f64>(view_done - build_start).count());
 		log::Debug("[textures] atlas {}x{} with {} frames in {} source groups", layout.width, layout.height, frames.size(), upload_groups.size());

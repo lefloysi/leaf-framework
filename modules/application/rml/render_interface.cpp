@@ -12,8 +12,8 @@
 #include "leaf/graphics/sampler.hpp"
 #include "leaf/graphics/texture.hpp"
 #include "leaf/graphics/texture_view.hpp"
-
-#include <stb_image.h>
+#include "leaf/manager/texture_atlas.hpp"
+#include "leaf/resource/prototypes/texture.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -107,34 +107,23 @@ namespace lf {
 		delete reinterpret_cast<Geometry*>(geometry);
 	}
 	Rml::TextureHandle Renderer::LoadTexture(Rml::Vector2i& texture_dimensions, const Rml::String& source) {
-		report<fs::path> source_path = fs::path::parse(source);
-		if (!source_path) {
-			log::Warning("{}", lf::format("[rml] invalid texture '{}': {}", source, source_path.error().message));
+		const TexturePrototype::ID texture_id = Database<TexturePrototype>::find(source);
+		if (!texture_id) {
+			log::Warning("[rml] texture '{}' is not a TexturePrototype", source);
 			return 0;
 		}
-		if (const auto prepared = asset::get(*source_path)) {
+		const TexturePrototype& prototype = Database<TexturePrototype>::get(texture_id);
+		for (const packed_atlas_frame& packed : loaded_texture_atlas().frames) {
+			if (packed.texture_index != static_cast<u32>(texture_id) || packed.frame_index != 0) { continue; }
 			textures.emplace_back(make_unique<TextureData>());
 			TextureData& texture = *textures.back();
-			texture.prepared = *prepared;
-			texture.size = prepared->size;
+			texture.prepared = { loaded_texture_atlas().view, loaded_texture_atlas().sampler, packed.rect, packed.size };
+			texture.size = packed.size;
 			texture_dimensions = { static_cast<i32>(texture.size.width), static_cast<i32>(texture.size.height) };
 			return reinterpret_cast<Rml::TextureHandle>(&texture);
 		}
-		LF_PROFILE_SCOPE("ui.load-image");
-		report<vector<u08>> image = fs::read_all(*source_path);
-		if (!image) {
-			log::Warning("{}", lf::format("[rml] failed to load texture '{}': {}", source, image.error().message));
-			return 0;
-		}
-
-		i32 width = 0;
-		i32 height = 0;
-		auto pixels = std::unique_ptr<stbi_uc, decltype(&stbi_image_free)>{ stbi_load_from_memory(reinterpret_cast<const stbi_uc*>(image->data()), static_cast<int>(image->size()), &width, &height, nullptr, 4), stbi_image_free };
-		if (!pixels || width <= 0 || height <= 0) {
-			return 0;
-		}
-		texture_dimensions = { width, height };
-		return GenerateTexture({ reinterpret_cast<const Rml::byte*>(pixels.get()), static_cast<usize>(width) * height * 4 }, texture_dimensions);
+		log::Warning("[rml] TexturePrototype '{}' has no packed first frame", Database<TexturePrototype>::name(prototype.id));
+		return 0;
 	}
 	Rml::TextureHandle Renderer::GenerateTexture(Rml::Span<const Rml::byte> source, Rml::Vector2i source_dimensions) {
 		if (source_dimensions.x <= 0 || source_dimensions.y <= 0 || source.empty()) {

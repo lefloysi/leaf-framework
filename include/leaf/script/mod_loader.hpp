@@ -4,7 +4,6 @@
 #include "leaf/core/progress.hpp"
 #include "leaf/core/singleton.hpp"
 #include "leaf/script/mod_info.hpp"
-#include "leaf/manager/asset.hpp"
 
 #include <mutex>
 #include <future>
@@ -32,7 +31,6 @@ namespace lf {
 
 		vector<ModInfo> loaded_mods;
 		vector<fs::mapping> mod_mappings;
-		unique_ptr<asset::group> images;
 		Progress loading_progress;
 		std::future<error> loading_result;
 		std::mutex operation_mutex;

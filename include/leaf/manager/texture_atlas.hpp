@@ -21,12 +21,13 @@ namespace lf {
 		u32 texture_index = 0;
 		u32 frame_index = 0;
 		lf::rect<f32> rect{};
+		dim2<u32> size{};
 	};
 
 	struct texture_atlas_options {
 		u32 padding = 2;
 		u32 max_frame_extent = 256;
-		optional<Progress> progress;
+		Progress progress = Progress("");
 		bool smooth = false;
 		u32 mip_levels = 1;
 	};
