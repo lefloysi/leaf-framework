@@ -9,6 +9,21 @@
 namespace lf {
 	unique_ptr<RmlBackend> rml_backend;
 
+	RmlElementRegistration::RmlElementRegistration(string_view tag, RmlElementInstancerFactory factory) {
+		Register<RmlBackend>::add([tag = string{ tag }, factory = std::move(factory)](RmlBackend& backend) mutable {
+			return backend.register_element(tag, factory());
+		});
+	}
+
+	error RmlBackend::register_element(string_view tag, unique_ptr<Rml::ElementInstancer> instancer) {
+		if (tag.empty() || !instancer) {
+			return error(generic_errc::invalid_argument, "Rml element registrations require a tag and instancer");
+		}
+		Rml::Factory::RegisterElementInstancer(Rml::String(tag), instancer.get());
+		instancers.emplace_back(std::move(instancer));
+		return {};
+	}
+
 	error init_rml(span<string_view> args) {
 		if (rml_backend) {
 			return error(generic_errc::unknown, "RmlUi is already initialized");
@@ -27,15 +42,8 @@ namespace lf {
 			return error(generic_errc::unknown, "Rml::Initialise failed");
 		}
 
-		if (error result = Register<RmlInitialization, error()>::install(); result) {
-			Rml::Shutdown();
-			Rml::SetRenderInterface(nullptr);
-			Rml::SetSystemInterface(nullptr);
-			Rml::SetFileInterface(nullptr);
-			return result;
-		}
-
-		if (error result = Register<RmlBackend, error(RmlBackend&)>::install(*backend); result) {
+		Rml::Factory::RegisterContextInstancer(&backend->context_instancer);
+		if (error result = Register<RmlBackend>::install(*backend); result) {
 			Rml::Shutdown();
 			Rml::SetRenderInterface(nullptr);
 			Rml::SetSystemInterface(nullptr);

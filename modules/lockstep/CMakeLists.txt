@@ -1,5 +1,8 @@
 add_library("leaf-lockstep" STATIC
     "session.cpp"
+    "host.cpp"
+    "remote.cpp"
+	"protocol.cpp"
 )
 add_library("leaf::lockstep" ALIAS "leaf-lockstep")
 target_include_directories("leaf-lockstep" PUBLIC

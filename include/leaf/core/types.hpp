@@ -17,6 +17,7 @@ using i64 = std::int64_t;
 
 using f32 = float;
 using f64 = double;
+using usize = std::size_t;
 static_assert(sizeof(f32) == 4, "f32 must be 4 bytes");
 static_assert(sizeof(f64) == 8, "f64 must be 8 bytes");
 

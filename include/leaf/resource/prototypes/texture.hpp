@@ -1,31 +1,52 @@
 #pragma once
 
+#include "leaf/core/distance.hpp"
 #include "leaf/core/error.hpp"
+#include "leaf/core/math/rect.hpp"
 #include "leaf/core/vector.hpp"
-#include "leaf/graphics/texture_atlas.hpp"
 #include "leaf/resource/prototype.hpp"
 
-#include <functional>
-
 namespace lf {
-	struct TextureSourceFrame {
+	struct TextureFramePrototype final : public Prototype<identifier<TextureFramePrototype, u16, void>> {
+		static constexpr string_view type() noexcept { return "texture-frame"; }
+		TextureFramePrototype(const dict& data);
+		error load() override;
+
 		string path;
-		std::optional<lf::rect<u32>> rect;
+		rect<u32> rect{};
 	};
 
 	struct TexturePrototype final : public Prototype<identifier<TexturePrototype, u16, void>> {
 		static constexpr string_view type() noexcept { return "texture"; }
-		inline static texture_atlas atlas;
-		static error BuildAtlas(rt::view<rt::queue> queue, const std::function<void(size_t, size_t)>& progress = {}, const std::function<void(string_view)>& phase = {});
-		static void ClearAtlas();
-
 		TexturePrototype(const dict& data);
 		~TexturePrototype();
+		error load() override;
 
-		string path;
-		f32 world_size = 1.0f;
-		f32 frames_per_second = 0.0f;
-		vector<TextureSourceFrame> frames;
-		vector<rect<f32>> atlas_frames;
+		lf::distance distance = lf::distance::from_quantum(1);
+		u32 frames_per_second = 0;
+		vector<TextureFramePrototype::ID> frames;
+	};
+
+	template<>
+	struct schema_trait<TextureFramePrototype> {
+		static auto get(auto& value) {
+			return group(
+				schema(PrototypeBase::base(value)),
+				field("path", value.path, value.path),
+				field("rect", value.rect, value.rect)
+			);
+		}
+	};
+
+	template<>
+	struct schema_trait<TexturePrototype> {
+		static auto get(auto& value) {
+			return group(
+				schema(PrototypeBase::base(value)),
+				field("distance", value.distance),
+				field("fps", value.frames_per_second),
+				field("frames", value.frames, value.frames)
+			);
+		}
 	};
 } // namespace lf

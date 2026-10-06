@@ -20,4 +20,16 @@ namespace lf {
 
 		error load() override;
 	};
+
+	template<>
+	struct schema_trait<CursorPrototype> {
+		static auto get(auto& value) {
+			return group(
+				schema(PrototypeBase::base(value)),
+				field("path", value.path),
+				field("hotspot_x", value.hotspot_x),
+				field("hotspot_y", value.hotspot_y)
+			);
+		}
+	};
 } // namespace lf

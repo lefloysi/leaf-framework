@@ -1,0 +1,45 @@
+struct UiDraw {
+	vec2 viewport_size;
+	vec2 translation;
+	f32 texture_mode;
+};
+
+uniform UiDraw ui_draw;
+var texture_2d<f32> UiTexture;
+
+struct Point {
+	vec2 position;
+	vec2 uv;
+	vec4 color;
+};
+
+struct Vertex : Position {
+	vec2 uv;
+	vec4 color;
+
+	fn Vertex(Point point) {
+		var vec2 pixel = point.position + ui_draw.translation;
+		position = vec4(pixel.x / ui_draw.viewport_size.x * 2.0 - 1.0, 1.0 - pixel.y / ui_draw.viewport_size.y * 2.0, 0.0, 1.0);
+		uv = point.uv;
+		color = point.color;
+	}
+};
+
+@stage : vertex
+fn rml(Point point) -> Vertex {
+	return Vertex(point);
+}
+
+@stage : fragment
+fn rml(Vertex vertex{.uv : smooth, .color : smooth}) -> vec4 {
+	if (ui_draw.texture_mode < 0.5) {
+		return vertex.color;
+	}
+	var vec4 texture_color = sample(UiTexture, vertex.uv);
+	return vec4(
+		texture_color.x * vertex.color.x,
+		texture_color.y * vertex.color.y,
+		texture_color.z * vertex.color.z,
+		texture_color.w * vertex.color.w
+	);
+}

@@ -12,17 +12,15 @@
 #include <mutex>
 
 namespace lf {
-	namespace {
-		struct ProfileBucket {
-			u64 calls = 0;
-			f64 total_ms = 0.0;
-			f64 max_ms = 0.0;
-		};
+	struct ProfileBucket {
+		u64 calls = 0;
+		f64 total_ms = 0.0;
+		f64 max_ms = 0.0;
+	};
 
-		std::atomic<bool> profiler_enabled = false;
-		std::mutex profiler_mutex;
-		unordered_map<string, ProfileBucket> profiler_buckets;
-	} // namespace
+	static std::atomic<bool> profiler_enabled = false;
+	static std::mutex profiler_mutex;
+	static unordered_map<string, ProfileBucket> profiler_buckets;
 
 	void SetProfilerEnabled(bool enabled) {
 		profiler_enabled.store(enabled, std::memory_order_relaxed);
@@ -72,13 +70,8 @@ namespace lf {
 
 	void LogProfileSnapshot(string_view label) {
 		vector<ProfileSnapshotEntry> snapshot = ProfileSnapshot();
-		static std::ofstream file(fs::folder::appdata / "leaf_profile.log", std::ios::app);
 		auto write_line = [&](string_view message) {
 			log::Debug("{}", message);
-			if (file) {
-				file << message << "\n";
-				file.flush();
-			}
 		};
 
 		write_line(lf::format("[{}] {} profile buckets", label, snapshot.size()));

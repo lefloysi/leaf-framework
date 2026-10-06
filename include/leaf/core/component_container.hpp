@@ -1,47 +1,264 @@
 #pragma once
 
+#include "leaf/core/array.hpp"
+#include "leaf/core/binary.hpp"
 #include "leaf/core/identifier.hpp"
+#include "leaf/core/optional.hpp"
 #include "leaf/core/types.hpp"
 #include "leaf/core/vector.hpp"
 
-#include <array>
+#include <algorithm>
 #include <concepts>
-#include <optional>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 namespace lf {
+	template<typename Container, typename Handle>
+	class entity {
+	  public:
+		using ID = Handle;
+
+		explicit operator bool() const {
+			return value;
+		}
+
+		operator Handle() const {
+			return value;
+		}
+
+		bool operator==(Handle other) const {
+			return value == other;
+		}
+
+		Handle id() const {
+			return value;
+		}
+
+		template<typename T>
+		T& emplace() {
+			return owner->template emplace<T>(value);
+		}
+
+		template<typename T>
+		bool has() const {
+			return owner->template has<T>(value);
+		}
+
+		template<typename T>
+		T& get() {
+			return *owner->template find<T>(value);
+		}
+
+		template<typename T>
+		const T& get() const {
+			return *static_cast<const Container*>(owner)->template find<T>(value);
+		}
+
+		entity(Container& owner, Handle value)
+			: owner(&owner), value(value) {}
+
+	  private:
+		Container* owner;
+		Handle value;
+	};
+
 	template<instantiation_of<identifier> Handle, typename... Component>
 	class component_container {
 	  public:
 		using handle = Handle;
+		using storage = std::tuple<std::pair<vector<Component>, vector<size_t>>...>;
 
-		struct bundle {
-			template<typename T>
-			std::optional<T>& component() {
-				return std::get<std::optional<T>>(values);
+		class entity {
+		  public:
+			using ID = Handle;
+
+			explicit operator bool() const {
+				return value;
+			}
+
+			operator Handle() const {
+				return value;
+			}
+
+			bool operator==(Handle other) const {
+				return value == other;
+			}
+
+			Handle id() const {
+				return value;
 			}
 
 			template<typename T>
-			const std::optional<T>& component() const {
-				return std::get<std::optional<T>>(values);
+			T& emplace() {
+				return owner->emplace<T>(value);
+			}
+
+			template<typename T>
+			bool has() const {
+				return owner->has<T>(value);
+			}
+
+			template<typename T>
+			T& get() {
+				return *owner->find<T>(value);
+			}
+
+			template<typename T>
+			const T& get() const {
+				return *static_cast<const component_container*>(owner)->find<T>(value);
 			}
 
 		  private:
-			std::tuple<std::optional<Component>...> values;
+			entity(component_container& owner, Handle value)
+				: owner(&owner), value(value) {}
+
+			component_container* owner;
+			Handle value;
+
+			friend component_container;
+		};
+
+		struct bundle {
+			template<typename T>
+			optional<T>& component() {
+				return std::get<optional<T>>(values);
+			}
+
+			template<typename T>
+			const optional<T>& component() const {
+				return std::get<optional<T>>(values);
+			}
+
+		  private:
+			std::tuple<optional<Component>...> values;
 			friend component_container;
 		};
 
 		struct slot {
-			std::array<size_t, sizeof...(Component)> components{};
+			array<size_t, sizeof...(Component)> components{};
+
+			template<bin::byte_stream Stream, bin::data<slot> Value>
+			friend error process(Stream& stream, Value& value) {
+				return stream(field("components", value.components));
+			}
 		};
 
-		component_container() : slots(1) {
+		struct Changes {
+			struct Entity {
+				Handle id{};
+				bool present = true;
+				std::tuple<optional<Component>...> components;
+
+				template<bin::byte_stream Stream, bin::data<Entity> Value>
+				friend error process(Stream& stream, Value& value) {
+					if (auto result = stream(field("id", value.id), field("present", value.present))) { return result; }
+					error result;
+					std::apply([&](auto&... components) {
+						((!result && !(result = stream(field("component", components)))) && ...);
+					},
+							   value.components);
+					return result;
+				}
+			};
+
+			vector<Entity> entities;
+
+			void record(const component_container& source, Handle id);
+			void record_all(const component_container& source);
+			void merge(const Changes& other);
+			void apply(component_container& destination) const;
+			void reset();
+			bool empty() const;
+		};
+
+		template<bin::byte_stream Stream, bin::data<component_container> Value>
+		friend error process(Stream& stream, Value& value) {
+			if (auto result = stream(field("slots", value.slots), field("free", value.free))) {
+				return result;
+			}
+
+			error result;
+			std::apply([&](auto&... storage) {
+				auto process_storage = [&]<typename Storage>(Storage& storage) {
+					if (result) {
+						return;
+					}
+
+					result = stream(
+						field("values", storage.first),
+						field("owners", storage.second)
+					);
+				};
+
+				(process_storage(storage), ...);
+			},
+				value.components);
+			if (result) {
+				return result;
+			}
+
+			if constexpr (bin::readable_byte_stream<Stream>) {
+				vector<bool> available(value.slots.size());
+				for (const usize index : value.free) {
+					if (index >= available.size() || available[index]) {
+						return { generic_errc::input_error, "Invalid free entity slot" };
+					}
+					available[index] = true;
+				}
+
+				usize component = 0;
+				std::apply([&](const auto&... storage) {
+					([&] {
+						const auto& [values, owners] = storage;
+						if (values.empty() || values.size() != owners.size()) {
+							result = { generic_errc::input_error, "Invalid component storage" };
+							return;
+						}
+
+						for (usize index = 1; index < owners.size(); ++index) {
+							const usize owner = owners[index];
+							if (owner >= value.slots.size() || available[owner] || value.slots[owner].components[component] != index) {
+								result = { generic_errc::input_error, "Invalid component owner" };
+								return;
+							}
+						}
+
+						for (usize index = 0; index < value.slots.size(); ++index) {
+							const usize dense = value.slots[index].components[component];
+							if (dense >= values.size() || (dense && owners[dense] != index)) {
+								result = { generic_errc::input_error, "Invalid component index" };
+								return;
+							}
+						}
+
+						++component;
+					}(),
+					 ...);
+				},
+						   value.components);
+			}
+
+			return result;
+		}
+
+		component_container() {
 			(std::get<component_index<Component>>(components).first.emplace_back(), ...);
 			(std::get<component_index<Component>>(components).second.emplace_back(), ...);
 		}
 
-		Handle create(bundle bundle = {}) {
+		template<typename... Previous>
+		explicit component_container(component_container<Handle, Previous...>&& previous) : component_container() {
+			static_assert(((component_index<Previous> < sizeof...(Component)) && ...));
+			slots.resize(previous.slots.size());
+			for (usize index = 0; index < slots.size(); ++index) {
+				((slots[index].components[component_index<Previous>] = previous.slots[index].components[component_container<Handle, Previous...>::template component_index<Previous>]), ...);
+			}
+			free = std::move(previous.free);
+			((std::get<component_index<Previous>>(components) = std::move(std::get<component_container<Handle, Previous...>::template component_index<Previous>>(previous.components))), ...);
+		}
+
+		entity create() {
 			size_t index;
 			if (free.empty()) {
 				index = slots.size();
@@ -51,56 +268,110 @@ namespace lf {
 				free.pop_back();
 			}
 			slots[index] = {};
-			const Handle handle{ static_cast<typename Handle::vnum_t>(index) };
+			return entity{ *this, Handle{ index } };
+		}
+
+		entity create(bundle bundle) {
+			auto result = create();
 			([&] {
-				auto& component = std::get<std::optional<Component>>(bundle.values);
+				auto& component = std::get<optional<Component>>(bundle.values);
 				if (component) {
-					add(handle, std::move(*component));
+					add(result.id(), std::move(*component));
 				}
 			}(),
-			 ...);
-			return handle;
+				 ...);
+			return result;
+		}
+
+		entity get(Handle value) {
+			return entity{ *this, value };
+		}
+
+		bool exists(Handle value) const {
+			return value && value < slots.size() && std::ranges::find(free, value) == free.end();
+		}
+
+		size_t slot_count() const {
+			return slots.size();
+		}
+
+		const vector<size_t>& free_slots() const {
+			return free;
+		}
+
+		template<typename T>
+		T& emplace(Handle entity) {
+			static_assert(component_index<T> < sizeof...(Component));
+			return add<T>(entity);
+		}
+
+		template<typename T, typename... Argument>
+		requires(sizeof...(Argument) > 0)
+		T& emplace(Handle entity, Argument&&... argument) {
+			static_assert(component_index<T> < sizeof...(Component));
+			auto& [values, owners] = std::get<component_index<T>>(components);
+			size_t& index = slots[entity].components[component_index<T>];
+			if (index != 0) {
+				return values[index];
+			}
+			index = values.size();
+			owners.push_back(entity);
+			return values.emplace_back(std::forward<Argument>(argument)...);
 		}
 
 		void destroy(Handle value) {
+			if (!exists(value)) { return; }
 			(erase<Component>(value), ...);
-			slots[value.get()] = {};
-			free.push_back(value.get());
+			slots[value] = {};
+			free.push_back(value);
 		}
 
 		void clear() {
-			*this = component_container();
+			*this = component_container{};
 		}
 
 		template<typename T>
 		bool has(Handle value) const {
-			return slots[value.get()].components[component_index<T>] != 0;
+			return value && value < slots.size() && slots[value].components[component_index<T>] != 0;
 		}
 
 		template<typename T>
 		T& add(Handle value, T component = {}) {
 			auto& [values, owners] = std::get<component_index<T>>(components);
-			size_t& index = slots[value.get()].components[component_index<T>];
+			size_t& index = slots[value].components[component_index<T>];
 			if (index != 0) {
 				return values[index];
 			}
 			index = values.size();
-			owners.push_back(value.get());
+			owners.push_back(value);
 			return values.emplace_back(std::move(component));
 		}
 
 		template<typename T>
 		auto find(Handle value) {
 			auto& values = std::get<component_index<T>>(components).first;
-			const size_t index = slots[value.get()].components[component_index<T>];
+			if (!has<T>(value)) { return values.end(); }
+			const size_t index = slots[value].components[component_index<T>];
 			return index == 0 ? values.end() : values.begin() + index;
 		}
 
 		template<typename T>
 		auto find(Handle value) const {
 			const auto& values = std::get<component_index<T>>(components).first;
-			const size_t index = slots[value.get()].components[component_index<T>];
+			if (!has<T>(value)) { return values.end(); }
+			const size_t index = slots[value].components[component_index<T>];
 			return index == 0 ? values.end() : values.begin() + index;
+		}
+
+		void destroy_if_present(Handle value) {
+			if (exists(value)) { destroy(value); }
+		}
+
+		void ensure(Handle value) {
+			if (exists(value)) { return; }
+			if (slots.size() <= value) { slots.resize(value + 1); }
+			std::erase(free, value);
+			slots[value] = {};
 		}
 
 		template<typename T>
@@ -117,7 +388,7 @@ namespace lf {
 		void each(F&& function) {
 			auto& [values, owners] = std::get<component_index<T>>(components);
 			for (size_t index = 1; index < values.size(); ++index) {
-				function(Handle(static_cast<typename Handle::vnum_t>(owners[index])), values[index]);
+				function(Handle{ owners[index] }, values[index]);
 			}
 		}
 
@@ -125,13 +396,23 @@ namespace lf {
 		void each(F&& function) const {
 			const auto& [values, owners] = std::get<component_index<T>>(components);
 			for (size_t index = 1; index < values.size(); ++index) {
-				function(Handle(static_cast<typename Handle::vnum_t>(owners[index])), values[index]);
+				function(Handle{ owners[index] }, values[index]);
 			}
+		}
+
+		template<typename Function>
+		void each_component(Function&& function) {
+			(function.template operator()<Component>(), ...);
+		}
+
+		template<typename Function>
+		void each_component(Function&& function) const {
+			(function.template operator()<Component>(), ...);
 		}
 
 		template<typename T>
 		void erase(Handle value) {
-			size_t index = slots[value.get()].components[component_index<T>];
+			size_t index = slots[value].components[component_index<T>];
 			if (index == 0) {
 				return;
 			}
@@ -146,13 +427,14 @@ namespace lf {
 			}
 			values.pop_back();
 			owners.pop_back();
-			slots[value.get()].components[component_index<T>] = 0;
+			slots[value].components[component_index<T>] = 0;
 		}
 
 	  private:
 		template<typename T>
 		static constexpr size_t component_index = [] {
-			constexpr std::array matches{ std::same_as<T, Component>... };
+			static_assert((std::same_as<T, Component> || ...), "Component type is not registered in this component_container");
+			constexpr array matches{ std::same_as<T, Component>... };
 			for (size_t index = 0; index < matches.size(); ++index) {
 				if (matches[index]) {
 					return index;
@@ -160,10 +442,14 @@ namespace lf {
 			}
 			return matches.size();
 		}();
+		template<instantiation_of<identifier> OtherHandle, typename... OtherComponent>
+		friend class component_container;
 
 		vector<slot> slots;
 		vector<size_t> free;
-		std::tuple<std::pair<vector<Component>, vector<size_t>>...> components;
+		storage components;
 	};
 
 } // namespace lf
+
+#include "leaf/core/component_container.inl"

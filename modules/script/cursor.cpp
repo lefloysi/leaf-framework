@@ -1,23 +1,17 @@
 #include "leaf/resource/prototypes/cursor.hpp"
 
+#include "leaf/core/filesystem.hpp"
 #include "leaf/core/format.hpp"
 #include "leaf/core/logging.hpp"
 #include "leaf/platform/platform.hpp"
-#include "leaf/script/virtual_filesystem.hpp"
 
 #include <stb_image.h>
 
 #include <memory>
 
 namespace lf {
-	CursorPrototype::CursorPrototype(const dict& data) : Prototype(data) {
-		load_field(data, "path", path);
-		if (has_field(data, "hotspot_x")) {
-			load_field(data, "hotspot_x", hotspot_x);
-		}
-		if (has_field(data, "hotspot_y")) {
-			load_field(data, "hotspot_y", hotspot_y);
-		}
+	CursorPrototype::CursorPrototype(const dict& data) : Prototype{ data } {
+		data.assign(schema(*this));
 	}
 
 	error CursorPrototype::load() {
@@ -25,18 +19,26 @@ namespace lf {
 			return {};
 		}
 
-		auto resolved = ResolveVirtualPathReport(path);
-		if (!resolved) {
-			log::Warning("{}", lf::format("[cursor] {}", resolved.error().message));
+		report<fs::path> image_path = fs::path::parse(path);
+		if (!image_path) {
+			log::Warning("{}", lf::format("[cursor] {}", image_path.error().message));
+			return {};
+		}
+		report<vector<u08>> image = fs::read_all(*image_path);
+		if (!image) {
+			log::Warning("{}", lf::format("[cursor] {}", image.error().message));
 			return {};
 		}
 
 		int width = 0;
 		int height = 0;
 		int components = 0;
-		std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> pixels{ stbi_load(resolved->string().c_str(), &width, &height, &components, 4), stbi_image_free };
+		std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> pixels{
+			stbi_load_from_memory(reinterpret_cast<const stbi_uc*>(image->data()), static_cast<int>(image->size()), &width, &height, &components, 4),
+			stbi_image_free,
+		};
 		if (!pixels || width <= 0 || height <= 0) {
-			log::Warning("{}", lf::format("[cursor] failed to load cursor image '{}'", resolved->string()));
+			log::Warning("{}", lf::format("[cursor] failed to load cursor image '{}'", path));
 			return {};
 		}
 

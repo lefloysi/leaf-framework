@@ -2,35 +2,38 @@
 
 #include "leaf/core/error.hpp"
 #include "leaf/core/progress.hpp"
-#include "leaf/core/yaml.hpp"
-#include "leaf/script/localization.hpp"
+#include "leaf/core/singleton.hpp"
 #include "leaf/script/mod_info.hpp"
 
+#include <mutex>
+#include <future>
+#include <thread>
+
 namespace lf {
-	/*!
-	** @ingroup modding
-	** @brief Loads all mods in the supplied mod collection.
-	** @param mod_tree Privileged and unprivileged mod roots to scan.
-	** @param progress Shared progress state used by the loader.
-	** @return An error if loading fails, or an empty error on success.
-	*/
-	error LoadMods(ModCollection& mod_tree, Progress& progress);
+	struct Mod : Singleton<Mod> {
+	  public:
+		struct Source {
+			fs::path path;
+			bool privileged = false;
+		};
 
-	/*!
-	** @ingroup modding
-	** @brief Gets the raw option table produced by the most recent successful mod load.
-	*/
-	const object& LoadedModOptions();
+		// async operation
+		static void load(span<const Source> sources);
+		static void unload();
+		static const Progress& progress();
+		static std::future<error> result();
+		static void cancel();
+		static span<ModInfo> loaded();
 
-	/*!
-	** @ingroup modding
-	** @brief Gets the raw option table produced by the most recent successful mod load.
-	*/
-	const vector<ModInfo>& LoadedMods();
+	  private:
+		friend Singleton<Mod>;
+		~Mod();
 
-	/*!
-	** @ingroup modding
-	** @brief Clears loaded mods and registered prototypes.
-	*/
-	void UnloadMods();
+		vector<ModInfo> loaded_mods;
+		vector<fs::mapping> mod_mappings;
+		Progress loading_progress;
+		std::future<error> loading_result;
+		std::mutex operation_mutex;
+		std::jthread loading_worker;
+	};
 } // namespace lf

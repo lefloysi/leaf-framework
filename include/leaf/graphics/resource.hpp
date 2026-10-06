@@ -4,14 +4,14 @@
 #include <leaf/core/error.hpp>
 #include <leaf/core/filesystem.hpp>
 #include <leaf/core/logging.hpp>
+#include <leaf/core/math/dim.hpp>
+#include <leaf/core/math/pos.hpp>
 #include <leaf/core/span.hpp>
 #include <leaf/core/string.hpp>
 #include <leaf/core/types.hpp>
 #include <leaf/core/vector.hpp>
-#include <leaf/math/dim.hpp>
-#include <leaf/math/pos.hpp>
 
-#include <rutile.h>
+#include <leaf/graphics/enums.hpp>
 
 #include <type_traits>
 
@@ -56,7 +56,7 @@ namespace rt {
 	/*!
 	** @brief Opaque Rutile graphics program resource.
 	*/
-	struct graphics_program;
+	struct program;
 
 	/*!
 	** @brief Opaque Rutile command buffer resource.
@@ -73,20 +73,19 @@ namespace rt {
 	*/
 	struct queue;
 
+	struct swapchain;
+
+	struct sampler;
+
 	/*!
 	** @brief Rutile shader uniform location.
 	*/
-	using uniform_location = rt_uniform_location;
+	using location = rt_location;
 
 	/*!
 	** @brief Rutile synchronization timestamp.
 	*/
 	using timepoint = rt_timepoint;
-
-	/*!
-	** @brief Opaque platform window resource.
-	*/
-	struct window;
 
 	/*!
 	** @brief Maps a Leaf resource tag to its native handle and destroy routine.
@@ -221,10 +220,13 @@ namespace rt {
 	template<typename Resource>
 	class unique {
 	  public:
+		using native_handle = resource_traits<Resource>::native_handle;
+
 		/*!
 		** @brief Creates an empty owner.
 		*/
 		unique() = default;
+		explicit unique(native_handle value) : resource{ value } {}
 
 		/*!
 		** @brief Takes ownership of an existing handle.
@@ -323,23 +325,13 @@ namespace rt {
 	LEAF_RESOURCE_TRAITS(buffer, rt_buffer, rtBufferDestroy);
 	LEAF_RESOURCE_TRAITS(texture, rt_texture, rtTextureDestroy);
 	LEAF_RESOURCE_TRAITS(texture_view, rt_texture_view, rtTextureViewDestroy);
-	LEAF_RESOURCE_TRAITS(graphics_program, rt_graphics_program, rtGraphicsProgramDestroy);
+	LEAF_RESOURCE_TRAITS(program, rt_program, rtProgramDestroy);
 	LEAF_RESOURCE_TRAITS(command_buffer, rt_command_buffer, rtCommandBufferDestroy);
-
+	LEAF_RESOURCE_TRAITS(sampler, rt_sampler, rtSamplerDestroy);
+	LEAF_RESOURCE_TRAITS(swapchain, rt_swapchain, rtSwapchainDestroy);
+	LEAF_RESOURCE_TRAITS(framebuffer, rt_framebuffer, rtFramebufferDestroy);
+	LEAF_RESOURCE_TRAITS(queue, rt_queue, rtQueueDestroy);	
 #undef LEAF_RESOURCE_TRAITS
-
-	template<>
-	struct resource_traits<framebuffer> {
-		using native_handle = rt_framebuffer;
-		static void destroy(native_handle handle) {
-			rtFramebufferDestroy(handle);
-		}
-	};
-
-	template<>
-	struct resource_traits<queue> {
-		using native_handle = rt_queue;
-	};
 
 } // namespace rt
 

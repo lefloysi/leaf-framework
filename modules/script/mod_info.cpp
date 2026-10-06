@@ -2,7 +2,7 @@
 #include <yaml-cpp/yaml.h>
 
 namespace lf {
-	// Format: [optional(?) forbidden(!) mod_name [operator version]"
+	// format: [optional(?) forbidden(!) mod_name [operator version]"
 	// Any amount of whitespace is allowed between the mod name, operator, and version
 	// Example: Optional mod "ExampleMod" with version >= 1.2.3 would be: "?ExampleMod >= 1.2.3"
 	// Example: Required mod "ExampleMod" with version == 1.2.3 would be: "ExampleMod == 1.2.3"
@@ -83,14 +83,26 @@ namespace lf {
 		return dep;
 	}
 
-	ModInfo parse_mod_info(string_view path, bool priviledged) {
+	report<ModInfo> parse_mod_info(string_view path, bool priviledged) try {
 		ModInfo info;
 		info.privileged = priviledged;
-		info.location = fs::path(path).parent_path();
+		report<fs::path> info_path = fs::path::parse(path);
+		if (!info_path) {
+			return unexpected(info_path.error());
+		}
+		info.location = info_path->parent();
 
-		YAML::Node node = YAML::LoadFile(std::string(path));
+		report<vector<u08>> bytes = fs::read_all(*info_path);
+		if (!bytes) {
+			return unexpected(bytes.error());
+		}
+		YAML::Node node = YAML::Load(string(reinterpret_cast<const char*>(bytes->data()), bytes->size()));
 		if (node["name"]) {
 			info.name = node["name"].as<string>();
+		}
+		const auto namespace_path{ fs::path::parse(string("/") + info.name) };
+		if (info.name.empty() || !namespace_path || namespace_path->filename() != info.name) {
+			return unexpected(error{ generic_errc::parse_error, "mod name must be a nonempty path component" });
 		}
 		if (node["mod_version"]) {
 			info.mod_version = version::from_string(node["mod_version"].as<string>());
@@ -115,16 +127,12 @@ namespace lf {
 		}
 		if (node["dependencies"]) {
 			for (const auto& dep : node["dependencies"]) {
-				info.dependencies.push_back(ModDependency::parse(dep.as<string>()));
+				info.dependencies.emplace_back(ModDependency::parse(dep.as<string>()));
 			}
 		}
 
 		return info;
-	}
-	void ModCollection::add_privileged_dir(const fs::path& path) {
-		this->privileged_dirs.push_back(path);
-	}
-	void ModCollection::add_unprivileged_dir(const fs::path& path) {
-		this->unprivileged_dirs.push_back(path);
+	} catch (const std::exception& exception) {
+		return unexpected(error{ generic_errc::parse_error, exception.what() });
 	}
 } // namespace lf

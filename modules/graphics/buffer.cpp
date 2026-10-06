@@ -1,21 +1,5 @@
 #include "leaf/graphics/buffer.hpp"
 
-#include <utility>
-
-namespace rt::detail {
-	rt_buffer_mode to_rutile(BufferMode mode) {
-		switch (mode) {
-		case BufferMode::Static: return RT_BUFFER_STATIC;
-		case BufferMode::Dynamic: return RT_BUFFER_DYNAMIC;
-		}
-		std::unreachable();
-	}
-
-	rt_buffer_usage to_rutile(BufferUsage usage) {
-		return static_cast<rt_buffer_usage>(static_cast<u32>(usage));
-	}
-} // namespace rt::detail
-
 namespace rt {
 	handle<buffer> Buffer::Create() {
 		rt_buffer buffer = rtBufferCreate();
@@ -27,20 +11,13 @@ namespace rt {
 		rtBufferDestroy(buffer);
 	}
 
-	timepoint Buffer::Data(view<buffer> buffer, BufferMode mode, BufferUsage usage, u64 size, const void* data) {
-		rt_timepoint timepoint = rtBufferData(buffer, detail::to_rutile(mode), detail::to_rutile(usage), size, data);
-		detail::check_rutile_error("failed to upload buffer data");
-		return timepoint;
+	void Buffer::Resize(view<buffer> buffer, memory_type memory_type, u64 size) {
+		rtBufferResize(buffer, static_cast<rt_memory_type>(memory_type), size);
+		detail::check_rutile_error("failed to resize buffer");
 	}
 
-	timepoint Buffer::Subdata(view<buffer> buffer, u64 offset, u64 size, const void* data) {
-		rt_timepoint timepoint = rtBufferSubdata(buffer, offset, size, data);
-		detail::check_rutile_error("failed to upload buffer subdata");
-		return timepoint;
-	}
-
-	void Buffer::Read(view<buffer> buffer, u64 offset, u64 size, void* data) {
-		rtBufferRead(buffer, offset, size, data);
+	void Buffer::Read(view<buffer> buffer, rt_buffer_range range, u08* data, u64 data_size) {
+		rtBufferRead(buffer, range, data, data_size);
 		detail::check_rutile_error("failed to read buffer");
 	}
 } // namespace rt

@@ -8,4 +8,4 @@ namespace lf {
 			return value;
 		}
 	};
-}
+} // namespace lf

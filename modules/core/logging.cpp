@@ -3,7 +3,6 @@
 #include <atomic>
 #include <condition_variable>
 #include <deque>
-#include <filesystem>
 #include <iomanip>
 #include <iostream>
 #include <mutex>
@@ -159,10 +158,6 @@ namespace lf::log {
 		}
 	}
 
-	string Logger::render_line(const Record& r) const {
-		return ::lf::log::render_line(r);
-	}
-
 	void Logger::worker_loop(std::stop_token token) {
 		while (!token.stop_requested()) {
 
@@ -191,7 +186,7 @@ namespace lf::log {
 				continue;
 			}
 
-			const string line = render_line(item.record);
+			const string line = ::lf::log::render_line(item.record);
 
 			for (auto& s : sinks) {
 				s->write(item.record, line);
@@ -214,28 +209,6 @@ namespace lf::log {
 				: std::cout;
 
 		out << console_color(record.level) << line << "\x1b[0m\n";
-	}
-
-	FileSink::FileSink(string_view path) {
-		std::filesystem::path p{ std::string(path) };
-
-		if (p.has_parent_path()) {
-			std::filesystem::create_directories(p.parent_path());
-		}
-
-		file.open(p, std::ios::out | std::ios::app);
-	}
-
-	FileSink::~FileSink() {
-		flush();
-	}
-
-	void FileSink::write(const Record&, string_view line) {
-		file << line << '\n';
-	}
-
-	void FileSink::flush() {
-		file.flush();
 	}
 
 } // namespace lf::log

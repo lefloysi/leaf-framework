@@ -6,12 +6,9 @@ This directory is also a standalone CMake project, so Leaf can be built independ
 
 ## Layout
 
-- `src/leaf` is the framework source, organized into modules: `application`, `core`, `graphics`, `lockstep`, `math`, `network`, `platform`, `pmg`, `script`, `store`, and `system`.
+- `include/leaf` contains the public headers and `modules` contains the framework implementation. Modules include `application`, `audio`, `core`, `framework`, `graphics`, `lockstep`, `math`, `network`, `platform`, `pmg`, `resource`, `script`, `store`, and `system`.
 - `Rutile` is the graphics API used by Leaf (see [Rutile/README.md](Rutile/README.md)).
-- `example` contains sample projects (`core`, `lockstep`, `network`, `steam`).
-- `tests` is the CTest test suite.
-- `docs` is the generated Doxygen reference; `docsrc` holds its sources.
-- `tools` and `cmake` hold build tooling; `steam-sdk` is the Steamworks SDK drop-in location.
+- `tests` contains the CTest suite. Its targets and CTest registration are always configured; `leaf-tests` is excluded from the default build.
 
 ## How To Compile
 
@@ -37,14 +34,14 @@ C:\vcpkg\vcpkg.exe install --triplet x64-windows-static
 Configure and build Leaf:
 
 ```powershell
-cmake -S . -B out/build/x64-Debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static -DLEAF_BUILD_EXAMPLES=ON -DLEAF_BUILD_TESTS=ON
+cmake -S . -B out/build/x64-Debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static
 cmake --build out/build/x64-Debug --target leaf-framework
 ```
 
-Build examples or tests:
+Build the test executable, then run the CTest suite:
 
 ```powershell
-cmake --build out/build/x64-Debug --target leaf-framework-dev
+cmake --build out/build/x64-Debug --target leaf-tests
 ctest --test-dir out/build/x64-Debug --output-on-failure
 ```
 
@@ -80,19 +77,19 @@ Install all dependencies with one command:
 Configure and build Leaf:
 
 ```bash
-cmake -S . -B out/build/linux-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE=$HOME/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-linux -DLEAF_BUILD_RUTILE_DX12=OFF -DLEAF_BUILD_EXAMPLES=ON -DLEAF_BUILD_TESTS=ON
+cmake -S . -B out/build/linux-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE=$HOME/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-linux
 cmake --build out/build/linux-debug --target leaf-framework
 ```
 
-Build examples or tests:
+Build the test executable, then run the CTest suite:
 
 ```bash
-cmake --build out/build/linux-debug --target leaf-framework-dev
+cmake --build out/build/linux-debug --target leaf-tests
 ctest --test-dir out/build/linux-debug --output-on-failure
 ```
 
 ## Notes
 
-Leaf requires `miniaudio` through `find_package(miniaudio REQUIRED)`. The local `cmake/Findminiaudio.cmake` module creates the `miniaudio::miniaudio` imported target for vcpkg installs that provide only `miniaudio.h`.
+Leaf's audio and application modules locate `miniaudio.h` with CMake's `find_path`; provide a dependency installation that makes that header discoverable to CMake.
 
 Rutile's Vulkan backend requires the Vulkan SDK, Vulkan headers, the Vulkan loader, SPIRV-Cross, and Vulkan Memory Allocator. The DirectX 12 backend uses the Windows SDK that ships with Visual Studio.

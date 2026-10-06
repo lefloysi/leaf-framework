@@ -1,19 +1,11 @@
 #pragma once
 
-#include <leaf/core/span.hpp>
-
 #include <sol/sol.hpp>
-#include <leaf/core/error.hpp>
-
-#include <functional>
 
 namespace lf {
-	using script_installer = std::function<void(sol::state&)>;
-
+	class object;
+	object sol_to_object(const sol::object& value);
+	sol::object object_to_sol(sol::state_view state, const object& value);
 	sol::state CreateState();
-<<<<<<< Updated upstream
-	void PrepareState(sol::state& state, span<const script_installer> installers);
-=======
-	error InstallScriptInterfaces(sol::state& state);
->>>>>>> Stashed changes
-}
+} // namespace lf
+

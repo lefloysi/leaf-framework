@@ -1,22 +1,18 @@
 #include "leaf/script/state.hpp"
-
-#include "leaf/script/extensions.hpp"
+#include <leaf/core/exception.hpp>
+#include <leaf/core/register.hpp>
 
 namespace lf {
+	error InstallScriptInterfaces(sol::state& state);
+	static const auto interfaces_registered{ [] {
+		Register<sol::state>::add(InstallScriptInterfaces);
+		return true;
+	}() };
+
 	sol::state CreateState() {
-		sol::state state;
+		sol::state state{};
 		state.open_libraries(sol::lib::base, sol::lib::math, sol::lib::string, sol::lib::table);
-<<<<<<< Updated upstream
-		script_system::install(state);
-=======
-		if (const auto error{ Register<sol::state, error(sol::state&)>::install(state) }) { throw runtime_exception(error.message); }
->>>>>>> Stashed changes
+		if (const auto error{ Register<sol::state>::install(state) }) { throw runtime_exception(error.message); }
 		return state;
 	}
-
-	void PrepareState(sol::state& state, span<const script_installer> installers) {
-		for (const script_installer& install : installers) {
-			install(state);
-		}
-	}
-}
+} // namespace lf

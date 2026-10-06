@@ -10,8 +10,8 @@
 namespace rt {
 	string_view GraphicsBackendName();
 
-	error init_graphics(span<string_view> args, bool headless);
-	error init_graphics_extensions(bool headless);
+	error init_graphics(span<string_view> args);
+	error init_graphics_extensions();
 	bool graphics_available();
 	void exit_graphics();
 	error rutile_error();

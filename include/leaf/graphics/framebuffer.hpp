@@ -6,8 +6,8 @@
 namespace rt::Framebuffer {
 	handle<framebuffer> Create();
 	void Destroy(handle<framebuffer> framebuffer);
-	view<texture_view> ColorView(view<framebuffer> framebuffer, u32 slot);
-	void SetColorView(view<framebuffer> framebuffer, u32 slot, view<texture_view> attachment);
+	view<texture_view> ColorView(view<framebuffer> framebuffer, location location);
+	void SetColorView(view<framebuffer> framebuffer, location location, view<texture_view> attachment);
 	void SetDepthView(view<framebuffer> framebuffer, view<texture_view> attachment);
 } // namespace rt::Framebuffer
 

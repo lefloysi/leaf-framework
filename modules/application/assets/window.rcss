@@ -1,0 +1,74 @@
+.window {
+	display: block;
+	position: absolute;
+	width: 640px;
+	min-width: 180px;
+	min-height: 120px;
+	background: #120A14;
+	border-width: 3px;
+	border-color: #3B1F2D;
+	border-top-color: #C33A4A;
+	border-left-color: #3B1F2D;
+	border-right-color: #050407;
+	border-bottom-color: #050407;
+	color: #F4EEF2;
+	z-index: 1;
+}
+
+.window-title {
+	display: block;
+	height: 36px;
+	padding: 8px 86px 0px 16px;
+	background: #1D101F;
+	border-width: 0px 0px 2px 0px;
+	border-bottom-color: #3B1F2D;
+	color: #F4EEF2;
+	font-size: 18px;
+	overflow: hidden;
+}
+
+.window-title button {
+	position: absolute;
+	top: 7px;
+	width: 28px;
+	height: 28px;
+	padding: 0px;
+	margin: 0px;
+	background: #0B070D;
+	border-width: 3px;
+	border-color: #3B1F2D;
+	border-top-color: #C33A4A;
+	border-left-color: #C33A4A;
+	border-right-color: #050407;
+	border-bottom-color: #050407;
+	color: #F4EEF2;
+	font-size: 18px;
+	line-height: 20px;
+	text-align: center;
+}
+
+.window-title button:hover {
+	background: #5B1F32;
+	border-top-color: #E06A5F;
+	border-left-color: #E06A5F;
+}
+
+.window-title button:active {
+	background: #E06A5F;
+	border-top-color: #050407;
+	border-left-color: #050407;
+	border-right-color: #C33A4A;
+	border-bottom-color: #F4EEF2;
+	color: #050407;
+}
+
+.window-title .window-close-button {
+	right: 10px;
+}
+
+.window-body {
+	display: block;
+	position: relative;
+	margin: 12px;
+	overflow: auto;
+}

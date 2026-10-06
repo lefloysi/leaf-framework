@@ -1,0 +1,42 @@
+find_package(Catch2 CONFIG REQUIRED)
+include(Catch)
+
+add_executable(leaf-procedural-tests EXCLUDE_FROM_ALL procedural/mesh_generator.cpp)
+target_link_libraries(leaf-procedural-tests PRIVATE leaf::procedural Catch2::Catch2WithMain)
+catch_discover_tests(leaf-procedural-tests TEST_PREFIX "leaf::procedural::")
+
+add_executable("leaf-tests" EXCLUDE_FROM_ALL
+    "core/component_container.cpp"
+    "core/binary.cpp"
+    "core/time.cpp"
+    "graphics/vertex_layout.cpp"
+    "core/filesystem.cpp"
+    "resource_schemas.cpp"
+    "script/prototype_lua.cpp"
+    "script/mod_loader.cpp"
+    "script/state.cpp"
+)
+
+target_link_libraries("leaf-tests" PRIVATE
+    "Catch2::Catch2WithMain"
+    "leaf::core"
+    "leaf::resource"
+    "leaf::script"
+    "leaf::system"
+)
+
+catch_discover_tests("leaf-tests"
+    TEST_PREFIX "leaf::"
+)
+
+add_executable(leaf-network-tests EXCLUDE_FROM_ALL network/channel.cpp)
+target_link_libraries(leaf-network-tests PRIVATE leaf::network leaf::lockstep leaf::store-standalone Catch2::Catch2WithMain)
+catch_discover_tests(leaf-network-tests TEST_PREFIX "leaf::network::")
+
+add_executable(leaf-binary-tests EXCLUDE_FROM_ALL core/binary.cpp)
+target_link_libraries(leaf-binary-tests PRIVATE leaf::core Catch2::Catch2WithMain)
+catch_discover_tests(leaf-binary-tests TEST_PREFIX "leaf::binary::")
+
+add_executable(leaf-mod-tests EXCLUDE_FROM_ALL script/mod_loader.cpp)
+target_link_libraries(leaf-mod-tests PRIVATE Catch2::Catch2WithMain leaf::core leaf::resource leaf::script leaf::system)
+catch_discover_tests(leaf-mod-tests TEST_PREFIX "leaf::mods::")

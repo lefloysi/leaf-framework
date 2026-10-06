@@ -4431,11 +4431,11 @@ static int stbi__compute_huffman_codes(stbi__zbuf* a) {
 		if (c < 16)
 			lencodes[n++] = (stbi_uc)c;
 		else {
-			stbi_uc world = 0;
+			stbi_uc game = 0;
 			if (c == 16) {
 				c = stbi__zreceive(a, 2) + 3;
 				if (n == 0) return stbi__err("bad codelengths", "Corrupt PNG");
-				world = lencodes[n - 1];
+				game = lencodes[n - 1];
 			} else if (c == 17) {
 				c = stbi__zreceive(a, 3) + 3;
 			} else if (c == 18) {
@@ -4444,7 +4444,7 @@ static int stbi__compute_huffman_codes(stbi__zbuf* a) {
 				return stbi__err("bad codelengths", "Corrupt PNG");
 			}
 			if (ntot - n < c) return stbi__err("bad codelengths", "Corrupt PNG");
-			memset(lencodes + n, world, c);
+			memset(lencodes + n, game, c);
 			n += c;
 		}
 	}

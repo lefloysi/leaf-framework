@@ -5,9 +5,6 @@
 
 #include <vector>
 
-#define IDX_FROM_PTR(array_start_ptr, object_ptr) \
-	static_cast<std::size_t>((object_ptr) - (array_start_ptr))
-
 namespace lf {
 	template<typename T, typename Alloc = std::allocator<T>>
 	class vector : public std::vector<T, Alloc> {

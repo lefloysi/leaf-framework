@@ -36,6 +36,10 @@ namespace lf {
 		report<fixed> checked_subtract(fixed other) const;
 		report<fixed> checked_multiply(fixed other) const;
 		report<fixed> checked_divide(fixed other) const;
+		report<fixed> checked_mul_div(fixed multiplier, fixed divisor) const;
+		fixed mul_div(fixed multiplier, fixed divisor) const;
+		report<fixed> checked_sqrt() const;
+		fixed sqrt() const;
 
 		fixed operator-() const;
 		fixed operator+(fixed other) const;
@@ -55,3 +59,10 @@ namespace lf {
 		i64 raw_value = 0;
 	};
 } // namespace lf
+
+template<>
+struct lf::type_name_trait<lf::fixed> {
+	static constexpr const char* get() {
+		return "fixed";
+	}
+};

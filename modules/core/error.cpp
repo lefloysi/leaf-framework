@@ -17,6 +17,9 @@ namespace lf {
 		static generic_error_category instance;
 		return instance;
 	}
+	error_code make_error_code(generic_errc value) {
+		return { static_cast<i32>(value), generic_category() };
+	}
 
 	const char* graphics_error_category::name() const noexcept {
 		return "graphics";
@@ -28,12 +31,25 @@ namespace lf {
 		static graphics_error_category instance;
 		return instance;
 	}
-
-	error_code make_error_code(generic_errc e) {
-		return { static_cast<i32>(e), generic_category() };
+	error_code make_error_code(graphics_errc value) {
+		return { static_cast<i32>(value), graphics_category() };
 	}
-	error_code make_error_code(graphics_errc e) {
-		return { static_cast<i32>(e), graphics_category() };
+
+	const ch08* filesystem_error_category::name() const noexcept {
+		return "filesystem";
+	}
+
+	string filesystem_error_category::message(i32 value) const {
+		return string(magic_enum::enum_name(static_cast<fs::error_code>(value)));
+	}
+
+	const error_category& filesystem_category() {
+		static filesystem_error_category instance;
+		return instance;
+	}
+
+	error_code make_error_code(fs::error_code value) {
+		return { static_cast<i32>(value), filesystem_category() };
 	}
 
 	error::operator bool() const noexcept {

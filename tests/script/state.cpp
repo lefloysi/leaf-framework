@@ -1,7 +1,7 @@
-#include <leaf/script/state.hpp>
-#include <leaf/script/mod_loader.hpp>
-#include <leaf/core/register.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <leaf/core/register.hpp>
+#include <leaf/script/mod_loader.hpp>
+#include <leaf/script/state.hpp>
 
 TEST_CASE("script states install shared interfaces and retain independent globals", "[script]") {
 	auto first{ lf::CreateState() };
@@ -9,7 +9,7 @@ TEST_CASE("script states install shared interfaces and retain independent global
 	REQUIRE(first.safe_script("assert(type(settings.get) == 'function'); assert(type(mods.enabled) == 'function'); assert(type(localization.languages) == 'function'); assert(fs.join('/saves', 'world.ooo') == '/saves/world.ooo')", sol::script_pass_on_error).valid());
 	first["scene_local"] = 42;
 	REQUIRE(second["scene_local"].get<sol::object>().get_type() == sol::type::lua_nil);
-	lf::Register<sol::state, lf::error(sol::state&)>::add([](sol::state& state) -> lf::error { state["extra"] = true; return {}; });
+	lf::Register<sol::state>::add([](sol::state& state) -> lf::error { state["extra"] = true; return {}; });
 	auto third{ lf::CreateState() };
 	REQUIRE(third["extra"].get<bool>());
 	REQUIRE(second["extra"].get<sol::object>().get_type() == sol::type::lua_nil);
