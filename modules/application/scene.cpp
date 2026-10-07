@@ -24,17 +24,20 @@
 
 namespace lf {
 	namespace {
-		string key_name(input_key key) {
-			if (key >= KEY_A && key <= KEY_Z) {
-				return string(1, static_cast<char>('a' + key - KEY_A));
-			}
-			if (key >= KEY_0 && key <= KEY_9) {
-				return string(1, static_cast<char>('0' + key - KEY_0));
-			}
-			if (key >= KEY_F1 && key <= KEY_F24) {
-				return lf::format("f{}", static_cast<int>(key - KEY_F1 + 1));
-			}
+		bool same_control(input_control first, input_control second) {
+			return first.type == second.type && first.value == second.value;
+		}
 
+		string button_name(input_button button) {
+			switch (button) {
+			case BUTTON_LEFT: return "mouse-left";
+			case BUTTON_RIGHT: return "mouse-right";
+			case BUTTON_MIDDLE: return "mouse-middle";
+			default: return lf::format("mouse-{}", static_cast<u16>(button));
+			}
+		}
+
+		string special_key_name(input_key key) {
 			switch (key) {
 			case KEY_ESCAPE: return "escape";
 			case KEY_TAB: return "tab";
@@ -73,6 +76,15 @@ namespace lf {
 			case KEY_SLASH: return "slash";
 			default: return {};
 			}
+		}
+
+		string key_name(input_key key) {
+			if (key >= KEY_A && key <= KEY_Z) { return string(1, static_cast<char>('a' + key - KEY_A)); }
+			if (key >= KEY_0 && key <= KEY_9) { return string(1, static_cast<char>('0' + key - KEY_0)); }
+			if (key >= KEY_F1 && key <= KEY_F24) { return lf::format("f{}", static_cast<int>(key - KEY_F1 + 1)); }
+			if (key >= KEY_NUMPAD_0 && key <= KEY_NUMPAD_9) { return lf::format("numpad-{}", static_cast<int>(key - KEY_NUMPAD_0)); }
+			const string name = special_key_name(key);
+			return name.empty() ? lf::format("key-{}", static_cast<u16>(key)) : name;
 		}
 
 	} // namespace
@@ -230,8 +242,8 @@ namespace lf {
 	}
 
 	Scene::Scene(Window& display) : display(display) {
-		const dim2<u32> size = this->display.size();
-		context = Rml::CreateContext(lf::format("scene-{}", static_cast<const void*>(this)), { static_cast<i32>(size.width), static_cast<i32>(size.height) });
+		const dim2<u32> extent = this->display.extent();
+		context = Rml::CreateContext(lf::format("scene-{}", static_cast<const void*>(this)), { static_cast<i32>(extent.width), static_cast<i32>(extent.height) });
 		if (!context) {
 			throw runtime_exception("failed to create RML scene context");
 		}
@@ -340,39 +352,70 @@ namespace lf {
 				const auto setting = LoadInputSetting(mod, action);
 				if (setting) { binding.resolved_key = *setting; }
 			}
-			if (found == resolved_keybinds.end()) { resolved_keybinds.emplace_back(std::move(binding)); }
-			else { *found = std::move(binding); }
+			if (found == resolved_keybinds.end()) {
+				resolved_keybinds.emplace_back(std::move(binding));
+			} else {
+				*found = std::move(binding);
+			}
 		}
 	}
 
-	void Scene::keybinds(input_key key, bool down) {
+	bool Scene::binding_active(Rml::Element& binding, input_control control) const {
+		Rml::Element* scope = binding.GetParentNode();
+		if (!scope || !scope->IsVisible() || binding.HasAttribute("disabled")) { return false; }
+		const bool mouse = control.type == INPUT_CONTROL_BUTTON;
+		Rml::Element* target = mouse ? context->GetHoverElement() : context->GetFocusElement();
+		if (!mouse && target && (target->GetTagName() == "input" || target->GetTagName() == "textarea" || target->GetTagName() == "select")) { return false; }
+		if (scope == rml_document || (!mouse && scope->HasAttribute("input-fallback"))) { return true; }
+		for (auto* ancestor = target; ancestor; ancestor = ancestor->GetParentNode()) {
+			if (ancestor == scope) { return true; }
+		}
+		return false;
+	}
+
+	void Scene::keybinds(input_control control, bool down) {
 		LF_PROFILE_SCOPE("input.keybinds");
 		if (!down) {
 			auto held = held_keybinds;
-			std::erase_if(held_keybinds, [key](const auto& binding) { return binding.first == key; });
+			std::erase_if(held_keybinds, [control](const auto& binding) { return same_control(binding.first, control); });
 			for (const auto& binding : held) {
-				if (binding.first == key && binding.second) { binding.second->DispatchEvent("keyup", {}); }
+				if (same_control(binding.first, control) && binding.second) { binding.second->DispatchEvent("keyup", {}); }
 			}
 			return;
 		}
-		if (std::ranges::any_of(held_keybinds, [key](const auto& binding) { return binding.first == key; })) { return; }
-		Rml::Element* focus = context->GetFocusElement();
-		if (focus && (focus->GetTagName() == "input" || focus->GetTagName() == "textarea" || focus->GetTagName() == "select")) { return; }
+		if (std::ranges::any_of(held_keybinds, [control](const auto& binding) { return same_control(binding.first, control); })) { return; }
 		refresh_keybinds();
-		const string name = key_name(key);
+		const string name = control.type == INPUT_CONTROL_BUTTON ? button_name(static_cast<input_button>(control.value)) : key_name(static_cast<input_key>(control.value));
 		const auto bindings = resolved_keybinds;
 		for (const auto& resolved : bindings) {
 			Rml::Element* binding = resolved.element.get();
 			if (!binding || binding->GetOwnerDocument() != rml_document || resolved.resolved_key != name) { continue; }
-			Rml::Element* scope = binding->GetParentNode();
-			if (!scope || !scope->IsVisible() || binding->HasAttribute("disabled")) { continue; }
-			bool active = scope == rml_document || scope->HasAttribute("input-fallback");
-			for (auto* ancestor = focus; ancestor; ancestor = ancestor->GetParentNode()) {
-				active |= ancestor == scope;
-			}
-			if (!active) { continue; }
-			held_keybinds.emplace_back(key, binding->GetObserverPtr());
+			if (!binding_active(*binding, control)) { continue; }
+			held_keybinds.emplace_back(control, binding->GetObserverPtr());
 			binding->DispatchEvent("keydown", {});
+		}
+	}
+
+	void Scene::control_input(const input_event& event) {
+		if (event.control.type == INPUT_CONTROL_BUTTON) {
+			const int button = rml_button(static_cast<input_button>(event.control.value));
+			if (event.state == input_state::Pressed) {
+				context->ProcessMouseButtonDown(button, rml_modifiers(event.modifiers));
+				keybinds(event.control, true);
+			}
+			if (event.state == input_state::Released) {
+				context->ProcessMouseButtonUp(button, rml_modifiers(event.modifiers));
+				keybinds(event.control, false);
+			}
+		} else if (event.control.type == INPUT_CONTROL_KEY) {
+			const auto key = rml_key(static_cast<input_key>(event.control.value));
+			if (event.state == input_state::Pressed && (key == Rml::Input::KI_UNKNOWN || context->ProcessKeyDown(key, rml_modifiers(event.modifiers)))) {
+				keybinds(event.control, true);
+			}
+			if (event.state == input_state::Released) {
+				if (key != Rml::Input::KI_UNKNOWN) { context->ProcessKeyUp(key, rml_modifiers(event.modifiers)); }
+				keybinds(event.control, false);
+			}
 		}
 	}
 
@@ -383,25 +426,7 @@ namespace lf {
 		for (const input_event& event : events) {
 			switch (event.type) {
 			case INPUT_EVENT_CONTROL:
-				if (event.control.type == INPUT_CONTROL_BUTTON) {
-					const int button = rml_button(static_cast<input_button>(event.control.value));
-					if (event.state == input_state::Pressed) {
-						context->ProcessMouseButtonDown(button, rml_modifiers(event.modifiers));
-					}
-					if (event.state == input_state::Released) {
-						context->ProcessMouseButtonUp(button, rml_modifiers(event.modifiers));
-					}
-				} else if (event.control.type == INPUT_CONTROL_KEY) {
-					const input_key code = static_cast<input_key>(event.control.value);
-					const Rml::Input::KeyIdentifier key = rml_key(code);
-					if (event.state == input_state::Pressed && (key == Rml::Input::KI_UNKNOWN || context->ProcessKeyDown(key, rml_modifiers(event.modifiers)))) {
-						keybinds(code, true);
-					}
-					if (event.state == input_state::Released) {
-						if (key != Rml::Input::KI_UNKNOWN) { context->ProcessKeyUp(key, rml_modifiers(event.modifiers)); }
-						keybinds(code, false);
-					}
-				}
+				control_input(event);
 				break;
 			case INPUT_EVENT_CURSOR_MOVE:
 				context->ProcessMouseMove(static_cast<i32>(event.position.x), static_cast<i32>(event.position.y), rml_modifiers(event.modifiers));
@@ -432,6 +457,7 @@ namespace lf {
 	}
 
 	void Scene::render() {
+		LF_PROFILE_SCOPE("frame.total");
 		if (!display.drawable()) {
 			return;
 		}
@@ -447,9 +473,9 @@ namespace lf {
 
 	rt::view<rt::command_buffer> Scene::record(rt::view<rt::command_buffer> commands) {
 		LF_PROFILE_SCOPE("frame.record-ui");
-		const dim2<u32> size = display.size();
-		if (context->GetDimensions() != Rml::Vector2i{ static_cast<i32>(size.width), static_cast<i32>(size.height) }) {
-			context->SetDimensions({ static_cast<i32>(size.width), static_cast<i32>(size.height) });
+		const dim2<u32> extent = display.frame_extent();
+		if (context->GetDimensions() != Rml::Vector2i{ static_cast<i32>(extent.width), static_cast<i32>(extent.height) }) {
+			{ LF_PROFILE_SCOPE("ui.resize-dimensions"); context->SetDimensions({ static_cast<i32>(extent.width), static_cast<i32>(extent.height) }); }
 		}
 		{
 			LF_PROFILE_SCOPE("ui.context-update");
@@ -457,7 +483,7 @@ namespace lf {
 		}
 		{
 			LF_PROFILE_SCOPE("ui.renderer-begin");
-			rml_backend->renderer.begin(commands, size);
+			rml_backend->renderer.begin(commands, extent);
 		}
 		{
 			LF_PROFILE_SCOPE("ui.context-render");
@@ -477,16 +503,16 @@ namespace lf {
 
 	Scene::RecordedContent Scene::record(rt::view<rt::command_buffer> commands, const std::function<void()>& content, const std::function<void()>& interface) {
 		LF_PROFILE_SCOPE("frame.record-segmented-ui");
-		const dim2<u32> size = display.size();
-		if (context->GetDimensions() != Rml::Vector2i{ static_cast<i32>(size.width), static_cast<i32>(size.height) }) {
-			context->SetDimensions({ static_cast<i32>(size.width), static_cast<i32>(size.height) });
+		const dim2<u32> extent = display.extent();
+		if (context->GetDimensions() != Rml::Vector2i{ static_cast<i32>(extent.width), static_cast<i32>(extent.height) }) {
+			context->SetDimensions({ static_cast<i32>(extent.width), static_cast<i32>(extent.height) });
 		}
 		{
 			LF_PROFILE_SCOPE("ui.context-update");
 			context->Update();
 		}
-		rml_backend->renderer.begin(commands, size);
-		context->GetRenderManager().PrepareRender({ static_cast<i32>(size.width), static_cast<i32>(size.height) });
+		rml_backend->renderer.begin(commands, extent);
+		context->GetRenderManager().PrepareRender({ static_cast<i32>(extent.width), static_cast<i32>(extent.height) });
 		content();
 		RecordedContent recorded;
 		recorded.content = rml_backend->renderer.checkpoint();

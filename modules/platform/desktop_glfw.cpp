@@ -3,6 +3,7 @@
 #include "leaf/application/window.hpp"
 #include "leaf/core/exception.hpp"
 #include "leaf/core/logging.hpp"
+#include "leaf/core/profiler.hpp"
 #include "leaf/core/singleton.hpp"
 #include "leaf/graphics/resource.hpp"
 
@@ -32,8 +33,8 @@ namespace lf {
 		GLFWwindow* native = nullptr;
 		Window* owner = nullptr;
 		mutable std::mutex state_mutex;
-		dim2<u32> size{};
-		dim2<u32> framebuffer_size{};
+		dim2<u32> extent{};
+		dim2<u32> framebuffer_extent{};
 		pos2<i32> position{};
 		bool visible = false;
 		bool iconified = false;
@@ -68,6 +69,7 @@ namespace lf {
 
 			auto task = std::make_shared<std::packaged_task<Result()>>(std::forward<Function>(function));
 			auto result = task->get_future();
+			LF_PROFILE_SCOPE("platform.request-wait");
 			{
 				std::lock_guard lock(request_mutex);
 				requests.emplace_back([task] { (*task)(); });
@@ -141,17 +143,17 @@ namespace {
 		return platform_window ? platform_window->owner : nullptr;
 	}
 
-	void update_window_size(GLFWwindow* wnd, int width, int height) {
+	void update_window_extent(GLFWwindow* wnd, int width, int height) {
 		if (lf::PlatformWindow* window = from_glfw(wnd)) {
 			std::lock_guard lock(window->state_mutex);
-			window->size = { static_cast<u32>(std::max(width, 0)), static_cast<u32>(std::max(height, 0)) };
+			window->extent = { static_cast<u32>(std::max(width, 0)), static_cast<u32>(std::max(height, 0)) };
 		}
 	}
 
-	void update_framebuffer_size(GLFWwindow* wnd, int width, int height) {
+	void update_framebuffer_extent(GLFWwindow* wnd, int width, int height) {
 		if (lf::PlatformWindow* window = from_glfw(wnd)) {
 			std::lock_guard lock(window->state_mutex);
-			window->framebuffer_size = { static_cast<u32>(std::max(width, 0)), static_cast<u32>(std::max(height, 0)) };
+			window->framebuffer_extent = { static_cast<u32>(std::max(width, 0)), static_cast<u32>(std::max(height, 0)) };
 		}
 	}
 
@@ -326,12 +328,13 @@ static void close_callback(GLFWwindow* wnd) {
 	}
 }
 
-static void window_size_callback(GLFWwindow* wnd, int width, int height) {
-	update_window_size(wnd, width, height);
+static void window_extent_callback(GLFWwindow* wnd, int width, int height) {
+	update_window_extent(wnd, width, height);
 }
 
-static void framebuffer_size_callback(GLFWwindow* wnd, int width, int height) {
-	update_framebuffer_size(wnd, width, height);
+static void framebuffer_extent_callback(GLFWwindow* wnd, int width, int height) {
+	update_framebuffer_extent(wnd, width, height);
+	if (auto* window = owner(wnd)) { window->on_framebuffer_resize(); }
 }
 
 static void window_position_callback(GLFWwindow* wnd, int x, int y) {
@@ -398,9 +401,9 @@ namespace lf {
 			int width = 0;
 			int height = 0;
 			glfwGetWindowSize(window->native, &width, &height);
-			window->size = { static_cast<u32>(std::max(width, 0)), static_cast<u32>(std::max(height, 0)) };
+			window->extent = { static_cast<u32>(std::max(width, 0)), static_cast<u32>(std::max(height, 0)) };
 			glfwGetFramebufferSize(window->native, &width, &height);
-			window->framebuffer_size = { static_cast<u32>(std::max(width, 0)), static_cast<u32>(std::max(height, 0)) };
+			window->framebuffer_extent = { static_cast<u32>(std::max(width, 0)), static_cast<u32>(std::max(height, 0)) };
 			glfwGetWindowPos(window->native, &width, &height);
 			window->position = { width, height };
 			return window;
@@ -447,8 +450,8 @@ namespace lf {
 			wnd->owner = owner;
 			GLFWwindow* native = to_glfw(wnd);
 			glfwSetWindowCloseCallback(native, close_callback);
-			glfwSetWindowSizeCallback(native, window_size_callback);
-			glfwSetFramebufferSizeCallback(native, framebuffer_size_callback);
+			glfwSetWindowSizeCallback(native, window_extent_callback);
+			glfwSetFramebufferSizeCallback(native, framebuffer_extent_callback);
 			glfwSetWindowPosCallback(native, window_position_callback);
 			glfwSetWindowIconifyCallback(native, window_iconify_callback);
 			glfwSetMouseButtonCallback(native, mouse_button_callback);
@@ -491,23 +494,23 @@ namespace lf {
 		});
 	}
 
-	void platform_window_size(PlatformWindow* wnd, dim2<u32> size) {
-		Platform::instance().invoke([wnd, size] { glfwSetWindowSize(to_glfw(wnd), static_cast<i32>(size.width), static_cast<i32>(size.height)); });
+	void platform_window_extent(PlatformWindow* wnd, dim2<u32> extent) {
+		Platform::instance().invoke([wnd, extent] { glfwSetWindowSize(to_glfw(wnd), static_cast<i32>(extent.width), static_cast<i32>(extent.height)); });
 	}
 
-	dim2<u32> platform_window_size(PlatformWindow* wnd) {
+	dim2<u32> platform_window_extent(PlatformWindow* wnd) {
 		std::lock_guard lock(wnd->state_mutex);
-		return wnd->size;
+		return wnd->extent;
 	}
 
-	dim2<u32> platform_framebuffer_size(PlatformWindow* wnd) {
+	dim2<u32> platform_framebuffer_extent(PlatformWindow* wnd) {
 		std::lock_guard lock(wnd->state_mutex);
-		return wnd->framebuffer_size;
+		return wnd->framebuffer_extent;
 	}
 
 	bool platform_window_drawable(PlatformWindow* wnd) {
 		std::lock_guard lock(wnd->state_mutex);
-		return !wnd->should_close && wnd->visible && !wnd->iconified && wnd->framebuffer_size.width > 0 && wnd->framebuffer_size.height > 0;
+		return !wnd->should_close && wnd->visible && !wnd->iconified && wnd->framebuffer_extent.width > 0 && wnd->framebuffer_extent.height > 0;
 	}
 
 	void platform_window_position(PlatformWindow* wnd, pos2<i32> position) {
@@ -519,8 +522,8 @@ namespace lf {
 		return wnd->position;
 	}
 
-	void platform_window_fullscreen(PlatformWindow* wnd, bool fullscreen, pos2<i32> windowed_position, dim2<u32> windowed_size) {
-		Platform::instance().invoke([wnd, fullscreen, windowed_position, windowed_size] {
+	void platform_window_fullscreen(PlatformWindow* wnd, bool fullscreen, pos2<i32> windowed_position, dim2<u32> windowed_extent) {
+		Platform::instance().invoke([wnd, fullscreen, windowed_position, windowed_extent] {
 			GLFWwindow* window = to_glfw(wnd);
 			if (fullscreen) {
 				GLFWmonitor* monitor = glfwGetPrimaryMonitor();
@@ -543,7 +546,7 @@ namespace lf {
 			}
 
 			glfwSetWindowAttrib(window, GLFW_FLOATING, GLFW_FALSE);
-			glfwSetWindowMonitor(window, nullptr, windowed_position.x, windowed_position.y, static_cast<int>(windowed_size.width), static_cast<int>(windowed_size.height), GLFW_DONT_CARE);
+			glfwSetWindowMonitor(window, nullptr, windowed_position.x, windowed_position.y, static_cast<int>(windowed_extent.width), static_cast<int>(windowed_extent.height), GLFW_DONT_CARE);
 			glfwSetWindowAttrib(window, GLFW_DECORATED, GLFW_TRUE);
 			glfwSetWindowAttrib(window, GLFW_RESIZABLE, GLFW_TRUE);
 		});
@@ -579,11 +582,10 @@ namespace lf {
 	}
 
 	void destroy_platform_cursor(PlatformCursor* cursor) {
+		if (!cursor) { return; }
 		Platform::instance().invoke([cursor] {
-			if (cursor) {
-				glfwDestroyCursor(cursor->native);
-				delete cursor;
-			}
+			glfwDestroyCursor(cursor->native);
+			delete cursor;
 		});
 	}
 
@@ -595,8 +597,7 @@ namespace lf {
 		return Platform::instance().update();
 	}
 	void platform_clipboard_text(string_view text) {
-		string owned_text = string(text);
-		Platform::instance().invoke([text = std::move(owned_text)] { glfwSetClipboardString(nullptr, text.c_str()); });
+		Platform::instance().invoke([text = string(text)] { glfwSetClipboardString(nullptr, text.c_str()); });
 	}
 
 	string platform_clipboard_text() {

@@ -34,13 +34,13 @@ namespace lf {
 	void platform_window_title(PlatformWindow* window, string_view title);
 	void platform_window_show(PlatformWindow* window);
 	void platform_window_hide(PlatformWindow* window);
-	void platform_window_size(PlatformWindow* window, dim2<u32> size);
-	dim2<u32> platform_window_size(PlatformWindow* window);
-	dim2<u32> platform_framebuffer_size(PlatformWindow* window);
+	void platform_window_extent(PlatformWindow* window, dim2<u32> extent);
+	dim2<u32> platform_window_extent(PlatformWindow* window);
+	dim2<u32> platform_framebuffer_extent(PlatformWindow* window);
 	bool platform_window_drawable(PlatformWindow* window);
 	void platform_window_position(PlatformWindow* window, pos2<i32> position);
 	pos2<i32> platform_window_position(PlatformWindow* window);
-	void platform_window_fullscreen(PlatformWindow* window, bool fullscreen, pos2<i32> windowed_position, dim2<u32> windowed_size);
+	void platform_window_fullscreen(PlatformWindow* window, bool fullscreen, pos2<i32> windowed_position, dim2<u32> windowed_extent);
 	bool platform_window_should_close(PlatformWindow* window);
 	void platform_window_should_close(PlatformWindow* window, bool should_close);
 	PlatformCursor* create_platform_cursor(const u08* rgba, u32 width, u32 height, u32 hotspot_x, u32 hotspot_y);

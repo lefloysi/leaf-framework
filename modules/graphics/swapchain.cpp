@@ -1,4 +1,7 @@
 #include "leaf/graphics/swapchain.hpp"
+#include "leaf/core/logging.hpp"
+
+#include <chrono>
 
 namespace rt::Swapchain {
 	handle<swapchain> Create() {
@@ -8,7 +11,11 @@ namespace rt::Swapchain {
 	}
 
 	void Resize(view<swapchain> swapchain, u32 width, u32 height) {
+		auto start = std::chrono::steady_clock::now();
 		rtSwapchainResize(swapchain, width, height);
+		auto end = std::chrono::steady_clock::now();
+		const auto elapsed = std::chrono::duration<double, std::milli>(end - start);
+		lf::log::Info("[swapchain] resize {}x{}: {:.3f} ms", width, height, elapsed.count());
 		detail::check_rutile_error("failed to resize swapchain");
 	}
 

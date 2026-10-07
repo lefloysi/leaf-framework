@@ -10,6 +10,7 @@
 
 #include <array>
 #include <mutex>
+#include <condition_variable>
 #include <vector>
 
 namespace lf {
@@ -242,7 +243,7 @@ namespace lf {
 namespace lf {
 	class Window {
 	  public:
-		Window(string_view title = "leaf-framework", dim2<u32> size = { 1280, 720 });
+		Window(string_view title = "leaf-framework", dim2<u32> extent = { 1280, 720 });
 		~Window();
 		Window(const Window&) = delete;
 		Window& operator=(const Window&) = delete;
@@ -252,7 +253,7 @@ namespace lf {
 		void set_title(string_view title);
 		void show();
 		void hide();
-		void set_size(dim2<u32> size);
+		void set_extent(dim2<u32> extent);
 		void set_fullscreen(bool enabled);
 		bool fullscreen() const;
 		void set_vsync(bool enabled);
@@ -261,7 +262,8 @@ namespace lf {
 		bool drawable() const;
 		bool should_close() const;
 		void set_should_close(bool should_close);
-		dim2<u32> size() const;
+		dim2<u32> extent() const;
+		dim2<u32> frame_extent() const;
 		std::vector<input_event> input_events();
 		input_state control_state(input_control control) const;
 		void update_input();
@@ -278,6 +280,7 @@ namespace lf {
 		void begin_rendering();
 		rt::timepoint end_frame();
 
+		void on_framebuffer_resize();
 		void on_control(input_control control, bool down, input_modifiers modifiers);
 		void on_text(u32 character);
 		void on_cursor(pos2<f32> position);
@@ -290,6 +293,9 @@ namespace lf {
 		static constexpr size_t control_count = KEY_ENUM_MAX + BUTTON_ENUM_MAX;
 		static size_t control_index(input_control control);
 		void discard_frame();
+		void wait_for_frame();
+		void resize_framebuffer(dim2<u32> extent);
+		bool needs_resize() const;
 
 		PlatformWindow* platform = nullptr;
 		rt::unique<rt::swapchain> swapchain;
@@ -297,12 +303,12 @@ namespace lf {
 		rt::unique<rt::command_buffer> frame_command_buffer;
 
 		rt::view<rt::framebuffer> frame_buffer;
-		rt::timepoint frame_rendered;
-		bool frame_submitted = false;
-		timespan frame_period = timespan();
-		timespan next_frame = timespan();
+		timespan frame_interval{};
+		timespan next_frame_at{};
+		std::mutex frame_mutex;
+		std::condition_variable resize_event;
 
-		dim2<u32> extent = { 1280, 720 };
+		dim2<u32> windowed_extent = { 1280, 720 };
 		dim2<u32> framebuffer_extent{};
 		pos2<f32> position = { 100, 100 };
 		pos2<f32> cursor_position{};

@@ -48,7 +48,9 @@ namespace lf {
 
 	  private:
 		void input(span<const input_event> events);
-		void keybinds(input_key key, bool down);
+		void keybinds(input_control control, bool down);
+		void control_input(const input_event& event);
+		bool binding_active(Rml::Element& binding, input_control control) const;
 		void refresh_keybinds();
 		struct KeyBinding {
 			Rml::ObserverPtr<Rml::Element> element;
@@ -59,7 +61,7 @@ namespace lf {
 			u64 revision = 0;
 		};
 		vector<KeyBinding> resolved_keybinds;
-		vector<std::pair<input_key, Rml::ObserverPtr<Rml::Element>>> held_keybinds;
+		vector<std::pair<input_control, Rml::ObserverPtr<Rml::Element>>> held_keybinds;
 
 		void ProcessEvent(Rml::Event& event) override;
 

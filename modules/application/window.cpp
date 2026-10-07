@@ -8,6 +8,8 @@
 #include "leaf/graphics/queue.hpp"
 #include "leaf/graphics/swapchain.hpp"
 #include "leaf/graphics/timepoint.hpp"
+#include "leaf/graphics/framebuffer.hpp"
+#include "leaf/graphics/texture_view.hpp"
 #include "leaf/manager/asset.hpp"
 #include "leaf/platform/platform.hpp"
 #include "leaf/resource/database.hpp"
@@ -31,8 +33,8 @@ namespace lf {
 		return control_count;
 	}
 
-	Window::Window(string_view title, dim2<u32> size) : extent(size) {
-		platform = create_platform_window({ title, size.width, size.height });
+	Window::Window(string_view title, dim2<u32> extent) : windowed_extent(extent) {
+		platform = create_platform_window({ title, extent.width, extent.height });
 		if (!platform) {
 			throw runtime_exception("failed to create platform window");
 		}
@@ -53,6 +55,7 @@ namespace lf {
 	Window::~Window() {
 		hide();
 		discard_frame();
+
 		rt::Timepoint::Wait(rt::Queue::Flush(queue));
 		frame_command_buffer.reset();
 		queue.reset();
@@ -72,26 +75,26 @@ namespace lf {
 	void Window::hide() {
 		platform_window_hide(platform);
 	}
-	void Window::set_size(dim2<u32> size) {
+	void Window::set_extent(dim2<u32> extent) {
 		if (fullscreen_enabled) {
 			return;
 		}
-		extent = size;
-		platform_window_size(platform, size);
+		windowed_extent = extent;
+		platform_window_extent(platform, extent);
 	}
 	void Window::set_fullscreen(bool enabled) {
 		if (fullscreen_enabled == enabled) {
 			return;
 		}
 		if (!enabled) {
-			platform_window_fullscreen(platform, false, { static_cast<i32>(position.x), static_cast<i32>(position.y) }, extent);
+			platform_window_fullscreen(platform, false, { static_cast<i32>(position.x), static_cast<i32>(position.y) }, windowed_extent);
 			fullscreen_enabled = false;
 			return;
 		}
 		const pos2<i32> actual_position = platform_window_position(platform);
 		position = { static_cast<f32>(actual_position.x), static_cast<f32>(actual_position.y) };
-		extent = platform_window_size(platform);
-		platform_window_fullscreen(platform, true, { static_cast<i32>(position.x), static_cast<i32>(position.y) }, extent);
+		windowed_extent = platform_window_extent(platform);
+		platform_window_fullscreen(platform, true, { static_cast<i32>(position.x), static_cast<i32>(position.y) }, windowed_extent);
 		fullscreen_enabled = enabled;
 	}
 	bool Window::fullscreen() const {
@@ -114,8 +117,8 @@ namespace lf {
 		if (should_close) { hide(); }
 	}
 
-	dim2<u32> Window::size() const {
-		return platform_window_size(platform);
+	dim2<u32> Window::extent() const {
+		return platform_window_extent(platform);
 	}
 
 	std::vector<input_event> Window::input_events() {
@@ -159,52 +162,70 @@ namespace lf {
 	rt::view<const rt::framebuffer> Window::current_framebuffer() const { return frame_buffer; }
 
 	void Window::discard_frame() {
-		if (!frame_buffer) {
-			return;
-		}
-		if (frame_submitted) {
-			rt::Swapchain::Present(swapchain, frame_rendered);
-		} else {
-			auto replacement = rt::unique(rt::CommandBuffer::Create());
-			frame_command_buffer = std::move(replacement);
-			const rt::timepoint released{ rt::Queue::Flush(queue) };
-			rt::Swapchain::Present(swapchain, released);
-		}
+		if (!frame_buffer) { return; }
+		frame_command_buffer = rt::unique(rt::CommandBuffer::Create());
+		const auto completion = rt::Queue::Flush(queue);
+		rt::Swapchain::Present(swapchain, completion);
 		frame_buffer = {};
-		frame_rendered = {};
-		frame_submitted = false;
 	}
 
 	void Window::submit(rt::view<rt::command_buffer> commands) {
 		rt::Timepoint::Wait(rt::Queue::Submit(queue, commands));
 	}
 
+	void Window::on_framebuffer_resize() {
+		std::lock_guard lock(frame_mutex);
+		resize_event.notify_one();
+	}
+
+	bool Window::needs_resize() const {
+		const auto requested = platform_framebuffer_extent(platform);
+		return requested.width != framebuffer_extent.width || requested.height != framebuffer_extent.height;
+	}
+
+	void Window::wait_for_frame() {
+		LF_PROFILE_SCOPE("frame.pacing-wait");
+		std::unique_lock lock(frame_mutex);
+		const auto delay = next_frame_at - now();
+		if (frame_interval > timespan() && delay > timespan() && !needs_resize()) {
+			resize_event.wait_for(lock, std::chrono::nanoseconds(delay.quantum_count()));
+		}
+		next_frame_at = now() + frame_interval;
+	}
+
+	void Window::resize_framebuffer(dim2<u32> extent) {
+		LF_PROFILE_SCOPE("resize.swapchain");
+		rt::Swapchain::Resize(swapchain, extent.width, extent.height);
+		framebuffer_extent = extent;
+	}
+
+	dim2<u32> Window::frame_extent() const { return frame_buffer ? framebuffer_extent : extent(); }
+
 	void Window::set_frame_rate(frequency limit) {
-		frame_period = limit.in_hertz().quantum_count().raw() > 0 ? limit.period() : timespan();
-		next_frame = timespan();
+		frame_interval = limit.in_hertz().quantum_count().raw() > 0 ? limit.period() : timespan();
+		next_frame_at = timespan();
 	}
 
 	rt::view<rt::command_buffer> Window::begin_frame() {
 		LF_PROFILE_SCOPE("frame.acquire-and-reset");
 		discard_frame();
 		if (!drawable()) { return {}; }
-		if (frame_period > timespan()) {
-			sleep_until(next_frame);
-			next_frame = now() + frame_period;
-		}
-		const dim2<u32> actual_framebuffer_size = platform_framebuffer_size(platform);
-		if (framebuffer_extent.width != actual_framebuffer_size.width || framebuffer_extent.height != actual_framebuffer_size.height) {
-			rt::Swapchain::Resize(swapchain, actual_framebuffer_size.width, actual_framebuffer_size.height);
-			framebuffer_extent = actual_framebuffer_size;
-		}
-		const rt_swapchain_acquire_result acquired = rt::Swapchain::Acquire(swapchain);
+		wait_for_frame();
+		const auto actual_framebuffer_extent = platform_framebuffer_extent(platform);
+
+		if (framebuffer_extent.width != actual_framebuffer_extent.width || framebuffer_extent.height != actual_framebuffer_extent.height) { resize_framebuffer(actual_framebuffer_extent); }
+		rt_swapchain_acquire_result acquired;
+		{ LF_PROFILE_SCOPE("frame.acquire"); acquired = rt::Swapchain::Acquire(swapchain); }
 		frame_buffer.value = acquired.framebuffer;
 		if (!frame_buffer) {
+			RecordProfileSample("frame.acquire-skipped", 0.0);
 			return {};
 		}
-		frame_rendered = {};
-		frame_submitted = false;
-		rt::Queue::Wait(queue, acquired.timepoint);
+
+		const auto target_extent = rt::TextureView::Extent(rt::Framebuffer::ColorView(frame_buffer, {}));
+		framebuffer_extent = { u32(target_extent.width), u32(target_extent.height) };
+
+		{ LF_PROFILE_SCOPE("frame.acquire-gpu-wait"); rt::Queue::Wait(queue, acquired.timepoint); }
 		rt::Cmd::Reset(frame_command_buffer);
 		rt::Cmd::Begin(frame_command_buffer);
 		asset::update(frame_command_buffer);
@@ -221,30 +242,25 @@ namespace lf {
 		rt::Cmd::ClearColor(frame_command_buffer, {}, 0.0f, 0.0f, 0.0f, 1.0f);
 		rt::Cmd::Clear(frame_command_buffer, rt::clear_flag::color);
 
-		const dim2<u32> framebuffer_size = platform_framebuffer_size(platform);
-		rt::Cmd::SetViewport(frame_command_buffer, 0, 0, framebuffer_size.width, framebuffer_size.height, 0.0f, 1.0f);
-		rt::Cmd::SetScissor(frame_command_buffer, 0, 0, framebuffer_size.width, framebuffer_size.height);
+		const auto extent = framebuffer_extent;
+		rt::Cmd::SetViewport(frame_command_buffer, 0, 0, extent.width, extent.height, 0.0f, 1.0f);
+		rt::Cmd::SetScissor(frame_command_buffer, 0, 0, extent.width, extent.height);
 	}
 	rt::timepoint Window::end_frame() {
-		if (!frame_buffer) {
-			return {};
-		}
+		if (!frame_buffer) { return {}; }
 		rt::Cmd::EndRendering(frame_command_buffer);
 		rt::Cmd::End(frame_command_buffer);
+		rt::timepoint completion;
 		{
 			LF_PROFILE_SCOPE("frame.submit-native");
-			frame_rendered = rt::Queue::Submit(queue, frame_command_buffer);
+			completion = rt::Queue::Submit(queue, frame_command_buffer);
 		}
-		frame_submitted = true;
-		asset::submitted(frame_command_buffer, frame_rendered);
+		frame_buffer = {};
 		{
 			LF_PROFILE_SCOPE("frame.present");
-			rt::Swapchain::Present(swapchain, frame_rendered);
+			rt::Swapchain::Present(swapchain, completion);
 		}
-		const auto completion = frame_rendered;
-		frame_buffer = {};
-		frame_rendered = {};
-		frame_submitted = false;
+		asset::submitted(frame_command_buffer, completion);
 		return completion;
 	}
 
