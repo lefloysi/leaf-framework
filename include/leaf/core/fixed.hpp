@@ -19,6 +19,7 @@ namespace lf {
 		}
 
 		static report<fixed> from_integer(i64 value);
+		static report<fixed> from_double(f64 value);
 		static report<fixed> from_ratio(i64 numerator, i64 denominator);
 		static report<fixed> parse(string_view text);
 

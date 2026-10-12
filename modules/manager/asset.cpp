@@ -177,7 +177,7 @@ namespace lf::asset {
 	}
 
 	void load(group& group, Progress progress) {
-		std::scoped_lock lock{ records_mutex };
+		std::unique_lock lock{ records_mutex };
 		group.result = {};
 		group.completed_images.clear();
 		group.completed_shaders.clear();
@@ -225,32 +225,38 @@ namespace lf::asset {
 				record->retirement.clear();
 			}
 
-			if (record->status == state::ready) {
+			if (record->status == state::ready || record->status == state::loading) {
 				continue;
 			}
 
 			record->result = {};
+			record->status = state::loading;
+			lock.unlock();
 			try {
-				record->program = rt::unique{ rt::Program::Create() };
+				auto program = rt::unique{ rt::Program::Create() };
 				if (!record->description.source.empty()) {
 					const auto bytes{ fs::read_all(record->description.source) };
 					if (!bytes) {
+						lock.lock();
 						record->result = bytes.error();
 						record->status = state::failed;
 						group.result = record->result;
 						group.status = state::failed;
 						return;
 					}
-					rt::Program::Source(record->program, record->description.entry_point, { reinterpret_cast<const byte*>(bytes->data()), bytes->size() });
+					rt::Program::Source(program, record->description.entry_point, { reinterpret_cast<const byte*>(bytes->data()), bytes->size() });
 				} else {
-					rt::Program::Source(record->program, record->description.entry_point, { record->description.bytes.data(), record->description.bytes.size() });
+					rt::Program::Source(program, record->description.entry_point, { record->description.bytes.data(), record->description.bytes.size() });
 				}
-				rt::Program::VertexLayout(record->program, rt::vertex_layout::Make(record->description.inputs));
-				rt::Program::RasterState(record->program, record->description.cull, record->description.front, record->description.fill);
-				rt::Program::BlendState(record->program, record->description.blend_enabled, record->description.source_color, record->description.destination_color, record->description.color_operation, record->description.source_alpha, record->description.destination_alpha, record->description.alpha_operation);
-				rt::Program::Finalize(record->program);
+				rt::Program::VertexLayout(program, rt::vertex_layout::Make(record->description.inputs));
+				rt::Program::RasterState(program, record->description.cull, record->description.front, record->description.fill);
+				rt::Program::BlendState(program, record->description.blend_enabled, record->description.source_color, record->description.destination_color, record->description.color_operation, record->description.source_alpha, record->description.destination_alpha, record->description.alpha_operation);
+				rt::Program::Finalize(program);
+				lock.lock();
+				record->program = std::move(program);
 				record->status = state::ready;
 			} catch (const std::exception& exception) {
+				if (!lock.owns_lock()) { lock.lock(); }
 				record->program = {};
 				record->result = error{ generic_errc::unknown, exception.what() };
 				record->status = state::failed;
@@ -320,6 +326,7 @@ namespace lf::asset {
 		if (group.completed_images.size() == group.image_demands.size() && group.completed_shaders.size() == group.shader_demands.size()) {
 			group.progress->set(normalized<u32>(normalized<u32>::maximum));
 			group.status = state::ready;
+			group.progress.reset();
 		}
 		return group.status;
 	}

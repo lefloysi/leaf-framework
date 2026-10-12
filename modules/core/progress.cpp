@@ -1,6 +1,7 @@
 #include "leaf/core/progress.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <mutex>
 #include <stdexcept>
 
@@ -206,6 +207,9 @@ namespace lf {
 		for (const Node* child : value_node.active) {
 			completed += static_cast<long double>(child->parent_weight) * value_locked(*child);
 		}
-		return static_cast<f32>(completed / total);
+		const f32 result = static_cast<f32>(completed / total);
+		// A phase is finished when its owning handle is released. Reporting its
+		// final work item must not finish the parent while cleanup is still running.
+		return value_node.active.empty() ? result : std::min(result, std::nextafter(1.0f, 0.0f));
 	}
 } // namespace lf

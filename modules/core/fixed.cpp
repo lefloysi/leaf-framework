@@ -7,6 +7,7 @@
 #include <bit>
 #include <cctype>
 #include <charconv>
+#include <cmath>
 #include <limits>
 #include <system_error>
 
@@ -15,6 +16,14 @@
 #endif
 
 namespace lf {
+	report<fixed> fixed::from_double(f64 value) {
+		const f64 scaled = value * scale;
+		if (!std::isfinite(scaled) || scaled < static_cast<f64>(std::numeric_limits<i64>::min()) || scaled >= -static_cast<f64>(std::numeric_limits<i64>::min())) {
+			return unexpected(error(generic_errc::out_of_range, "fixed floating point value out of range"));
+		}
+		return from_raw(static_cast<i64>(scaled));
+	}
+
 	static constexpr u64 sign_magnitude(i64 value) {
 		if (value >= 0) {
 			return static_cast<u64>(value);

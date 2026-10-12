@@ -369,7 +369,11 @@ namespace lf {
 
 		void ensure(Handle value) {
 			if (exists(value)) { return; }
-			if (slots.size() <= value) { slots.resize(value + 1); }
+			if (slots.size() <= value) {
+				const size_t first = slots.size();
+				slots.resize(value + 1);
+				for (size_t index = first; index < value; ++index) { free.push_back(index); }
+			}
 			std::erase(free, value);
 			slots[value] = {};
 		}

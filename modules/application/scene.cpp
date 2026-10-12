@@ -3,6 +3,7 @@
 #include <leaf/core/profiler.hpp>
 
 #include <algorithm>
+#include <bit>
 #include <leaf/core/exception.hpp>
 #include <leaf/core/format.hpp>
 #include <leaf/core/logging.hpp>
@@ -26,6 +27,20 @@ namespace lf {
 	namespace {
 		bool same_control(input_control first, input_control second) {
 			return first.type == second.type && first.value == second.value;
+		}
+
+		int chord_match(string_view binding, string_view key, input_modifiers modifiers) {
+			u08 required = 0;
+			for (auto separator = binding.find('+'); separator != string_view::npos; separator = binding.find('+')) {
+				const auto name = binding.substr(0, separator);
+				if (name == "shift") { required |= INPUT_MODIFIER_SHIFT; }
+				else if (name == "ctrl") { required |= INPUT_MODIFIER_CTRL; }
+				else if (name == "alt") { required |= INPUT_MODIFIER_ALT; }
+				else if (name == "super") { required |= INPUT_MODIFIER_SUPER; }
+				else { return -1; }
+				binding.remove_prefix(separator + 1);
+			}
+			return binding == key && (modifiers.value & required) == required ? std::popcount(required) : -1;
 		}
 
 		string button_name(input_button button) {
@@ -269,6 +284,7 @@ namespace lf {
 	}
 
 	void Scene::set_rml(string_view source) {
+		LF_PROFILE_SCOPE("ui.load-document");
 		unload_document();
 		rml_document = context->LoadDocumentFromMemory(Rml::String{ source });
 		if (!rml_document) {
@@ -315,6 +331,11 @@ namespace lf {
 
 	void Scene::ProcessEvent(Rml::Event& event) {
 		const Rml::String& name = event.GetType();
+		if (auto* modal = input_modal()) {
+			auto* target = event.GetTargetElement();
+			while (target && target != modal) { target = target->GetParentNode(); }
+			if (!target) { return; }
+		}
 		for (Rml::Element* element = event.GetTargetElement(); element; element = element->GetParentNode()) {
 			if (element->HasAttribute("disabled")) {
 				return;
@@ -360,7 +381,21 @@ namespace lf {
 		}
 	}
 
+	Rml::Element* Scene::input_modal() const {
+		if (!rml_document) { return nullptr; }
+		Rml::ElementList modals;
+		rml_document->QuerySelectorAll(modals, "[input-modal]");
+		return modals.empty() ? nullptr : modals.back();
+	}
+
 	bool Scene::binding_active(Rml::Element& binding, input_control control) const {
+		auto* modal = input_modal();
+		bool inside_modal = !modal;
+		for (auto* ancestor = &binding; ancestor; ancestor = ancestor->GetParentNode()) {
+			if (ancestor->HasAttribute("disabled")) { return false; }
+			inside_modal |= ancestor == modal;
+		}
+		if (!inside_modal) { return false; }
 		Rml::Element* scope = binding.GetParentNode();
 		if (!scope || !scope->IsVisible() || binding.HasAttribute("disabled")) { return false; }
 		const bool mouse = control.type == INPUT_CONTROL_BUTTON;
@@ -373,7 +408,7 @@ namespace lf {
 		return false;
 	}
 
-	void Scene::keybinds(input_control control, bool down) {
+	void Scene::keybinds(input_control control, bool down, input_modifiers modifiers) {
 		LF_PROFILE_SCOPE("input.keybinds");
 		if (!down) {
 			auto held = held_keybinds;
@@ -386,10 +421,21 @@ namespace lf {
 		if (std::ranges::any_of(held_keybinds, [control](const auto& binding) { return same_control(binding.first, control); })) { return; }
 		refresh_keybinds();
 		const string name = control.type == INPUT_CONTROL_BUTTON ? button_name(static_cast<input_button>(control.value)) : key_name(static_cast<input_key>(control.value));
-		const auto bindings = resolved_keybinds;
+		auto bindings = resolved_keybinds;
+		std::erase_if(bindings, [&](const auto& resolved) {
+			auto* binding = resolved.element.get();
+			return !binding || binding->GetOwnerDocument() != rml_document || !binding_active(*binding, control);
+		});
+		int priority = -1;
+		for (const auto& resolved : bindings) {
+			auto* binding = resolved.element.get();
+			if (binding && binding->GetOwnerDocument() == rml_document && binding_active(*binding, control)) {
+				priority = std::max(priority, chord_match(resolved.resolved_key, name, modifiers));
+			}
+		}
 		for (const auto& resolved : bindings) {
 			Rml::Element* binding = resolved.element.get();
-			if (!binding || binding->GetOwnerDocument() != rml_document || resolved.resolved_key != name) { continue; }
+			if (!binding || binding->GetOwnerDocument() != rml_document || priority < 0 || chord_match(resolved.resolved_key, name, modifiers) != priority) { continue; }
 			if (!binding_active(*binding, control)) { continue; }
 			held_keybinds.emplace_back(control, binding->GetObserverPtr());
 			binding->DispatchEvent("keydown", {});
@@ -401,7 +447,7 @@ namespace lf {
 			const int button = rml_button(static_cast<input_button>(event.control.value));
 			if (event.state == input_state::Pressed) {
 				context->ProcessMouseButtonDown(button, rml_modifiers(event.modifiers));
-				keybinds(event.control, true);
+				keybinds(event.control, true, event.modifiers);
 			}
 			if (event.state == input_state::Released) {
 				context->ProcessMouseButtonUp(button, rml_modifiers(event.modifiers));
@@ -410,7 +456,7 @@ namespace lf {
 		} else if (event.control.type == INPUT_CONTROL_KEY) {
 			const auto key = rml_key(static_cast<input_key>(event.control.value));
 			if (event.state == input_state::Pressed && (key == Rml::Input::KI_UNKNOWN || context->ProcessKeyDown(key, rml_modifiers(event.modifiers)))) {
-				keybinds(event.control, true);
+				keybinds(event.control, true, event.modifiers);
 			}
 			if (event.state == input_state::Released) {
 				if (key != Rml::Input::KI_UNKNOWN) { context->ProcessKeyUp(key, rml_modifiers(event.modifiers)); }
@@ -503,7 +549,7 @@ namespace lf {
 
 	Scene::RecordedContent Scene::record(rt::view<rt::command_buffer> commands, const std::function<void()>& content, const std::function<void()>& interface) {
 		LF_PROFILE_SCOPE("frame.record-segmented-ui");
-		const dim2<u32> extent = display.extent();
+		const dim2<u32> extent = display.frame_extent();
 		if (context->GetDimensions() != Rml::Vector2i{ static_cast<i32>(extent.width), static_cast<i32>(extent.height) }) {
 			context->SetDimensions({ static_cast<i32>(extent.width), static_cast<i32>(extent.height) });
 		}

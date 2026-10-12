@@ -173,24 +173,19 @@ namespace lf {
 		rt::Timepoint::Wait(rt::Queue::Submit(queue, commands));
 	}
 
-	void Window::on_framebuffer_resize() {
-		std::lock_guard lock(frame_mutex);
-		resize_event.notify_one();
-	}
-
-	bool Window::needs_resize() const {
-		const auto requested = platform_framebuffer_extent(platform);
-		return requested.width != framebuffer_extent.width || requested.height != framebuffer_extent.height;
-	}
-
 	void Window::wait_for_frame() {
 		LF_PROFILE_SCOPE("frame.pacing-wait");
 		std::unique_lock lock(frame_mutex);
 		const auto delay = next_frame_at - now();
-		if (frame_interval > timespan() && delay > timespan() && !needs_resize()) {
+		if (frame_interval > timespan() && delay > timespan()) {
 			resize_event.wait_for(lock, std::chrono::nanoseconds(delay.quantum_count()));
 		}
 		next_frame_at = now() + frame_interval;
+	}
+
+	void Window::on_framebuffer_resize() {
+		std::lock_guard lock(frame_mutex);
+		resize_event.notify_one();
 	}
 
 	void Window::resize_framebuffer(dim2<u32> extent) {
@@ -213,7 +208,10 @@ namespace lf {
 		wait_for_frame();
 		const auto actual_framebuffer_extent = platform_framebuffer_extent(platform);
 
-		if (framebuffer_extent.width != actual_framebuffer_extent.width || framebuffer_extent.height != actual_framebuffer_extent.height) { resize_framebuffer(actual_framebuffer_extent); }
+		if (framebuffer_extent.width != actual_framebuffer_extent.width || framebuffer_extent.height != actual_framebuffer_extent.height) {
+			LF_PROFILE_SCOPE("frame.swapchain-resize");
+			resize_framebuffer(actual_framebuffer_extent);
+		}
 		rt_swapchain_acquire_result acquired;
 		{ LF_PROFILE_SCOPE("frame.acquire"); acquired = rt::Swapchain::Acquire(swapchain); }
 		frame_buffer.value = acquired.framebuffer;
@@ -228,7 +226,7 @@ namespace lf {
 		{ LF_PROFILE_SCOPE("frame.acquire-gpu-wait"); rt::Queue::Wait(queue, acquired.timepoint); }
 		rt::Cmd::Reset(frame_command_buffer);
 		rt::Cmd::Begin(frame_command_buffer);
-		asset::update(frame_command_buffer);
+		{ LF_PROFILE_SCOPE("frame.asset-update"); asset::update(frame_command_buffer); }
 
 		return frame_command_buffer;
 	}

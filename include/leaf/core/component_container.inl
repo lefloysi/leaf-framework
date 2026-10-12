@@ -23,7 +23,7 @@ namespace lf {
 
 	template<instantiation_of<identifier> Handle, typename... Component>
 	void component_container<Handle, Component...>::Changes::record_all(const component_container<Handle, Component...>& source) {
-		for (size_t index = 1; index < source.slots.size(); ++index) {
+		for (size_t index = 0; index < source.slots.size(); ++index) {
 			const Handle id{ index };
 			if (source.exists(id)) {
 				record(source, id);

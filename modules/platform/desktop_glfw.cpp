@@ -109,7 +109,7 @@ namespace lf {
 
 		bool update() {
 			if (owns_current_thread()) {
-				glfwWaitEvents();
+				glfwPollEvents();
 				drain();
 			}
 			return true;
@@ -479,6 +479,10 @@ namespace lf {
 	}
 
 	void platform_window_show(PlatformWindow* wnd) {
+		{
+			std::lock_guard lock(wnd->state_mutex);
+			if (wnd->visible) { return; }
+		}
 		Platform::instance().invoke([wnd] {
 			glfwShowWindow(to_glfw(wnd));
 			std::lock_guard lock(wnd->state_mutex);

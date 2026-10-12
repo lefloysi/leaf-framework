@@ -280,7 +280,6 @@ namespace lf {
 		void begin_rendering();
 		rt::timepoint end_frame();
 
-		void on_framebuffer_resize();
 		void on_control(input_control control, bool down, input_modifiers modifiers);
 		void on_text(u32 character);
 		void on_cursor(pos2<f32> position);
@@ -288,6 +287,7 @@ namespace lf {
 		void on_scroll(pos2<f32> delta);
 		void on_focus(bool focused);
 		void on_drop(string_view path);
+		void on_framebuffer_resize();
 
 	  private:
 		static constexpr size_t control_count = KEY_ENUM_MAX + BUTTON_ENUM_MAX;
@@ -295,7 +295,6 @@ namespace lf {
 		void discard_frame();
 		void wait_for_frame();
 		void resize_framebuffer(dim2<u32> extent);
-		bool needs_resize() const;
 
 		PlatformWindow* platform = nullptr;
 		rt::unique<rt::swapchain> swapchain;
