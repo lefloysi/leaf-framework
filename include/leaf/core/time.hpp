@@ -117,3 +117,31 @@ namespace lf::bin {
 		return {};
 	}
 } // namespace lf::bin
+
+namespace lf::literals {
+	namespace detail {
+		consteval timespan duration(unsigned long long value, i64 scale) {
+			if (value > static_cast<unsigned long long>(std::numeric_limits<i64>::max() / scale)) { throw "duration literal is outside timespan range"; }
+			return timespan{ static_cast<i64>(value) * scale };
+		}
+		consteval timespan duration(long double value, i64 scale) {
+			const auto nanos = value * scale;
+			if (!(nanos >= 0 && nanos <= std::numeric_limits<i64>::max())) { throw "duration literal is outside timespan range"; }
+			return timespan{ static_cast<i64>(nanos) };
+		}
+	} // namespace detail
+	consteval timespan operator""_ns(unsigned long long value) { return detail::duration(value, 1LL); }
+	consteval timespan operator""_ns(long double value) { return detail::duration(value, 1LL); }
+	consteval timespan operator""_us(unsigned long long value) { return detail::duration(value, 1000LL); }
+	consteval timespan operator""_us(long double value) { return detail::duration(value, 1000LL); }
+	consteval timespan operator""_ms(unsigned long long value) { return detail::duration(value, 1000000LL); }
+	consteval timespan operator""_ms(long double value) { return detail::duration(value, 1000000LL); }
+	consteval timespan operator""_s(unsigned long long value) { return detail::duration(value, 1000000000LL); }
+	consteval timespan operator""_s(long double value) { return detail::duration(value, 1000000000LL); }
+	consteval timespan operator""_min(unsigned long long value) { return detail::duration(value, 60000000000LL); }
+	consteval timespan operator""_min(long double value) { return detail::duration(value, 60000000000LL); }
+	consteval timespan operator""_h(unsigned long long value) { return detail::duration(value, 3600000000000LL); }
+	consteval timespan operator""_h(long double value) { return detail::duration(value, 3600000000000LL); }
+	consteval timespan operator""_d(unsigned long long value) { return detail::duration(value, 86400000000000LL); }
+	consteval timespan operator""_d(long double value) { return detail::duration(value, 86400000000000LL); }
+} // namespace lf::literals

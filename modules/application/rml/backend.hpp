@@ -18,6 +18,7 @@ namespace lf {
 		RmlSystem system;
 		RmlFile file;
 		vector<unique_ptr<Rml::ElementInstancer>> instancers;
+		vector<byte> interface_font;
 
 		error register_element(string_view tag, unique_ptr<Rml::ElementInstancer> instancer);
 	};

@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 
 #include "leaf/core/typename.hpp"
 
@@ -108,3 +109,32 @@ struct lf::type_name_trait<wchar> {
 		return "wchar";
 	}
 };
+
+namespace lf::literals {
+	namespace detail {
+		template<typename Type>
+		consteval Type integer(unsigned long long value) {
+			if (value > static_cast<unsigned long long>(std::numeric_limits<Type>::max())) { throw "numeric literal is outside its type range"; }
+			return static_cast<Type>(value);
+		}
+	} // namespace detail
+	consteval u08 operator""_u08(unsigned long long value) { return detail::integer<u08>(value); }
+	consteval u16 operator""_u16(unsigned long long value) { return detail::integer<u16>(value); }
+	consteval u32 operator""_u32(unsigned long long value) { return detail::integer<u32>(value); }
+	consteval u64 operator""_u64(unsigned long long value) { return detail::integer<u64>(value); }
+	consteval i08 operator""_i08(unsigned long long value) { return detail::integer<i08>(value); }
+	consteval i16 operator""_i16(unsigned long long value) { return detail::integer<i16>(value); }
+	consteval i32 operator""_i32(unsigned long long value) { return detail::integer<i32>(value); }
+	consteval i64 operator""_i64(unsigned long long value) { return detail::integer<i64>(value); }
+	consteval usize operator""_usize(unsigned long long value) { return detail::integer<usize>(value); }
+	consteval f32 operator""_f32(long double value) {
+		if (value > std::numeric_limits<f32>::max()) { throw "numeric literal is outside its type range"; }
+		return static_cast<f32>(value);
+	}
+	consteval f32 operator""_f32(unsigned long long value) { return static_cast<f32>(value); }
+	consteval f64 operator""_f64(long double value) {
+		if (value > std::numeric_limits<f64>::max()) { throw "numeric literal is outside its type range"; }
+		return static_cast<f64>(value);
+	}
+	consteval f64 operator""_f64(unsigned long long value) { return static_cast<f64>(value); }
+} // namespace lf::literals

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "leaf/core/array.hpp"
+#include "leaf/application/color_encoding.hpp"
 #include "leaf/core/math/dim.hpp"
 #include "leaf/core/math/pos.hpp"
 #include "leaf/core/memory.hpp"
@@ -18,6 +19,7 @@ namespace lf {
 		f32 viewport_size[2] = { 1.0f, 1.0f };
 		f32 translation[2] = { 0.0f, 0.0f };
 		f32 texture_mode = 0.0f;
+		f32 output_linear = 0.0f;
 	};
 	static_assert(sizeof(UiUniform) == 32);
 
@@ -25,7 +27,7 @@ namespace lf {
 	  public:
 		Renderer();
 
-		void begin(rt::view<rt::command_buffer> upload_commands, dim2<u32> viewport_size);
+		void begin(rt::view<rt::command_buffer> upload_commands, dim2<u32> viewport_size, UiColorEncoding encoding);
 		rt::view<rt::command_buffer> checkpoint();
 		void end();
 		rt::view<rt::command_buffer> commands() const;
@@ -89,6 +91,9 @@ namespace lf {
 		dim2<u32> current_framebuffer_size{};
 
 		rt::unique<rt::program> program;
+		rt::unique<rt::buffer> color_decode;
+		UiColorEncoding output_encoding = UiColorEncoding::srgb;
+		rt::location color_decode_location;
 		rt::location vertex_location{};
 		rt::location uniform_location{};
 		rt::location texture_location{};

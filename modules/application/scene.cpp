@@ -518,6 +518,10 @@ namespace lf {
 	}
 
 	rt::view<rt::command_buffer> Scene::record(rt::view<rt::command_buffer> commands) {
+		return record(commands, UiColorEncoding::srgb);
+	}
+
+	rt::view<rt::command_buffer> Scene::record(rt::view<rt::command_buffer> commands, UiColorEncoding encoding) {
 		LF_PROFILE_SCOPE("frame.record-ui");
 		const dim2<u32> extent = display.frame_extent();
 		if (context->GetDimensions() != Rml::Vector2i{ static_cast<i32>(extent.width), static_cast<i32>(extent.height) }) {
@@ -529,7 +533,7 @@ namespace lf {
 		}
 		{
 			LF_PROFILE_SCOPE("ui.renderer-begin");
-			rml_backend->renderer.begin(commands, extent);
+			rml_backend->renderer.begin(commands, extent, encoding);
 		}
 		{
 			LF_PROFILE_SCOPE("ui.context-render");
@@ -544,10 +548,18 @@ namespace lf {
 	}
 
 	Scene::RecordedContent Scene::record(rt::view<rt::command_buffer> commands, const std::function<void()>& content) {
-		return record(commands, content, {});
+		return record(commands, content, {}, UiColorEncoding::srgb);
+	}
+
+	Scene::RecordedContent Scene::record(rt::view<rt::command_buffer> commands, const std::function<void()>& content, UiColorEncoding encoding) {
+		return record(commands, content, {}, encoding);
 	}
 
 	Scene::RecordedContent Scene::record(rt::view<rt::command_buffer> commands, const std::function<void()>& content, const std::function<void()>& interface) {
+		return record(commands, content, interface, UiColorEncoding::srgb);
+	}
+
+	Scene::RecordedContent Scene::record(rt::view<rt::command_buffer> commands, const std::function<void()>& content, const std::function<void()>& interface, UiColorEncoding encoding) {
 		LF_PROFILE_SCOPE("frame.record-segmented-ui");
 		const dim2<u32> extent = display.frame_extent();
 		if (context->GetDimensions() != Rml::Vector2i{ static_cast<i32>(extent.width), static_cast<i32>(extent.height) }) {
@@ -557,7 +569,7 @@ namespace lf {
 			LF_PROFILE_SCOPE("ui.context-update");
 			context->Update();
 		}
-		rml_backend->renderer.begin(commands, extent);
+		rml_backend->renderer.begin(commands, extent, encoding);
 		context->GetRenderManager().PrepareRender({ static_cast<i32>(extent.width), static_cast<i32>(extent.height) });
 		content();
 		RecordedContent recorded;

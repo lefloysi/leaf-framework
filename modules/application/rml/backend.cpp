@@ -5,6 +5,9 @@
 
 #include <RmlUi/Core.h>
 #include <RmlUi/Core/Factory.h>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
 
 namespace lf {
 	unique_ptr<RmlBackend> rml_backend;
@@ -51,6 +54,28 @@ namespace lf {
 			return result;
 		}
 		(void)Rml::LoadFontFace({ reinterpret_cast<const Rml::byte*>(Comic_Sans_MS_ttf), sizeof(Comic_Sans_MS_ttf) }, "Comic Sans MS", Rml::Style::FontStyle::Normal, Rml::Style::FontWeight::Auto, true);
+		const auto* system_root = std::getenv("WINDIR");
+		const std::filesystem::path fonts[] = {
+			system_root ? std::filesystem::path(system_root) / "Fonts" / "segoeui.ttf" : std::filesystem::path(),
+			"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+			"/System/Library/Fonts/Supplemental/Arial.ttf"
+		};
+		bool sans_loaded = false;
+		for (const auto& font : fonts) {
+			if (font.empty()) { continue; }
+			std::ifstream file(font, std::ios::binary | std::ios::ate);
+			if (!file) { continue; }
+			const auto length = file.tellg();
+			if (length <= 0) { continue; }
+			backend->interface_font.resize(static_cast<usize>(length));
+			file.seekg(0);
+			if (!file.read(reinterpret_cast<char*>(backend->interface_font.data()), static_cast<std::streamsize>(length))) { continue; }
+			sans_loaded = Rml::LoadFontFace({ reinterpret_cast<const Rml::byte*>(backend->interface_font.data()), backend->interface_font.size() }, "UI Sans", Rml::Style::FontStyle::Normal, Rml::Style::FontWeight::Auto, false);
+			if (sans_loaded) { break; }
+		}
+		if (!sans_loaded) {
+			(void)Rml::LoadFontFace({ reinterpret_cast<const Rml::byte*>(Comic_Sans_MS_ttf), sizeof(Comic_Sans_MS_ttf) }, "UI Sans", Rml::Style::FontStyle::Normal, Rml::Style::FontWeight::Auto, false);
+		}
 
 		rml_backend = std::move(backend);
 		return {};

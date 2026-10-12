@@ -1,6 +1,7 @@
 #pragma once
 
 #include "leaf/application/window.hpp"
+#include "leaf/application/color_encoding.hpp"
 #include "leaf/core/error.hpp"
 #include "leaf/core/string.hpp"
 #include "leaf/script/state.hpp"
@@ -33,8 +34,11 @@ namespace lf {
 		bool update(span<const input_event> events);
 		void render();
 		rt::view<rt::command_buffer> record(rt::view<rt::command_buffer> uploads);
+		rt::view<rt::command_buffer> record(rt::view<rt::command_buffer> uploads, UiColorEncoding encoding);
 		RecordedContent record(rt::view<rt::command_buffer> uploads, const std::function<void()>& content);
+		RecordedContent record(rt::view<rt::command_buffer> uploads, const std::function<void()>& content, UiColorEncoding encoding);
 		RecordedContent record(rt::view<rt::command_buffer> uploads, const std::function<void()>& content, const std::function<void()>& interface);
+		RecordedContent record(rt::view<rt::command_buffer> uploads, const std::function<void()>& content, const std::function<void()>& interface, UiColorEncoding encoding);
 		void set_rml(string_view source);
 		void set_rml(const char* source, usize size);
 		Rml::ElementDocument& document();

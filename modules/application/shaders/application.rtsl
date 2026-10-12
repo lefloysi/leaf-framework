@@ -2,10 +2,28 @@ struct UiDraw {
 	vec2 viewport_size;
 	vec2 translation;
 	f32 texture_mode;
+	f32 output_linear;
 };
 
 uniform UiDraw ui_draw;
 var texture_2d<f32> UiTexture;
+var buffer<void, f32> ui_color_decode;
+
+fn decode_channel(f32 value) -> f32 {
+	if (value <= 0.0) { return ui_color_decode[0]; }
+	if (value >= 1.0) { return ui_color_decode[4096]; }
+	var f32 scaled = value * 4096.0;
+	var usize index = usize(scaled);
+	var f32 fraction = scaled - f32(index);
+	return ui_color_decode[index] * (1.0 - fraction) + ui_color_decode[index + 1] * fraction;
+}
+
+fn linear_color(vec4 color, bool premultiplied) -> vec4 {
+	if (color.w <= 0.0) { return vec4(0.0, 0.0, 0.0, 0.0); }
+	var f32 divisor = 1.0;
+	if (premultiplied) { divisor = color.w; }
+	return vec4(decode_channel(color.x / divisor) * color.w, decode_channel(color.y / divisor) * color.w, decode_channel(color.z / divisor) * color.w, color.w);
+}
 
 struct Point {
 	vec2 position;
@@ -32,14 +50,17 @@ fn rml(Point point) -> Vertex {
 
 @stage : fragment
 fn rml(Vertex vertex{.uv : smooth, .color : smooth}) -> vec4 {
+	var vec4 color = vertex.color;
+	if (ui_draw.output_linear > 0.5) { color = linear_color(color, 1.0 > 0.0); }
 	if (ui_draw.texture_mode < 0.5) {
-		return vertex.color;
+		return color;
 	}
 	var vec4 texture_color = sample(UiTexture, vertex.uv);
+	if (ui_draw.output_linear > 0.5) { texture_color = linear_color(texture_color, ui_draw.texture_mode < 1.5); }
 	return vec4(
-		texture_color.x * vertex.color.x,
-		texture_color.y * vertex.color.y,
-		texture_color.z * vertex.color.z,
-		texture_color.w * vertex.color.w
+		texture_color.x * color.x,
+		texture_color.y * color.y,
+		texture_color.z * color.z,
+		texture_color.w * color.w
 	);
 }

@@ -16,6 +16,7 @@
 #include "leaf/resource/prototypes/texture.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <memory>
 
@@ -40,12 +41,25 @@ namespace lf {
 		vertex_location = rt::Program::InputLocation(program, vertex_input.attributes);
 		uniform_location = rt::Program::UniformLocation(program, "ui_draw");
 		texture_location = rt::Program::UniformLocation(program, "UiTexture");
+		color_decode_location = rt::Program::UniformLocation(program, "ui_color_decode");
 		const array<u08, 4> white_pixel{ 255, 255, 255, 255 };
 		textures.emplace_back(create_texture_data(1, 1));
 		white_texture = textures.back().get();
 		upload_texture(*white_texture, white_pixel.data());
 	}
-	void Renderer::begin(rt::view<rt::command_buffer> upload_commands, dim2<u32> viewport_size) {
+	void Renderer::begin(rt::view<rt::command_buffer> upload_commands, dim2<u32> viewport_size, UiColorEncoding encoding) {
+		output_encoding = encoding;
+		if (!color_decode) {
+			array<f32, 4097> values;
+			for (usize index = 0; index < values.size(); ++index) {
+				const f32 value = static_cast<f32>(index) / 4096.0f;
+				values[index] = value <= .04045f ? value / 12.92f : std::pow((value + .055f) / 1.055f, 2.4f);
+			}
+			color_decode = rt::unique{ rt::Buffer::Create() };
+			rt::Buffer::Resize(color_decode, rt::memory_type::device, sizeof(values));
+			rt::Cmd::BufferData(upload_commands, color_decode, { sizeof(values), 0 }, reinterpret_cast<const u08*>(values.data()));
+			rt::Cmd::BufferBarrier(upload_commands, color_decode, { sizeof(values), 0 }, { rt::stage_flag::transfer, rt::access_type::write }, { rt::stage_flag::fragment, rt::access_type::read });
+		}
 		released_textures.clear();
 		frame_upload_commands = upload_commands;
 		current_framebuffer_size = viewport_size;
@@ -277,8 +291,10 @@ namespace lf {
 		uniform.viewport_size[1] = static_cast<f32>(std::max(1u, current_framebuffer_size.height));
 		uniform.translation[0] = 0.0f;
 		uniform.translation[1] = 0.0f;
-		uniform.texture_mode = texture_data == white_texture ? 0.0f : 1.0f;
+		uniform.texture_mode = texture_data == white_texture ? 0.0f : texture_data->prepared.texture ? 2.0f : 1.0f;
+		uniform.output_linear = output_encoding == UiColorEncoding::linear ? 1.0f : 0.0f;
 		rt::Cmd::UseProgram(current_command_buffer, program);
+		rt::Cmd::BindBuffer(current_command_buffer, color_decode_location, color_decode, { 4097 * sizeof(f32), 0 });
 
 		if (batch.vertices != vertices) {
 			rt::Cmd::BufferData(frame_upload_commands, draw_vertices, { vertex_bytes, 0 }, reinterpret_cast<const u08*>(vertices.data()));
