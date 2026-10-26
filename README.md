@@ -7,7 +7,7 @@ This directory is also a standalone CMake project, so Leaf can be built independ
 ## Layout
 
 - `include/leaf` contains the public headers and `modules` contains the framework implementation. Modules include `application`, `audio`, `core`, `framework`, `graphics`, `lockstep`, `math`, `network`, `platform`, `pmg`, `resource`, `script`, `store`, and `system`.
-- `Rutile` is the graphics API used by Leaf (see [Rutile/README.md](Rutile/README.md)).
+- `RutileGraphics` is the graphics API used by Leaf (see [RutileGraphics/README.md](RutileGraphics/README.md)).
 - `tests` contains the CTest suite. Its targets and CTest registration are always configured; `leaf-tests` is excluded from the default build.
 
 ## How To Compile

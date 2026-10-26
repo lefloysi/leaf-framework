@@ -9,7 +9,7 @@ set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-add_subdirectory("Rutile")
+add_subdirectory("RutileGraphics")
 
 add_subdirectory("modules")
 
