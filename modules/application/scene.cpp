@@ -208,12 +208,20 @@ namespace lf {
 		if (key >= KEY_0 && key <= KEY_9) {
 			return static_cast<Rml::Input::KeyIdentifier>(Rml::Input::KI_0 + key - KEY_0);
 		}
+		if (key >= KEY_NUMPAD_0 && key <= KEY_NUMPAD_9) {
+			return static_cast<Rml::Input::KeyIdentifier>(Rml::Input::KI_NUMPAD0 + key - KEY_NUMPAD_0);
+		}
 		if (key >= KEY_F1 && key <= KEY_F24) {
 			return static_cast<Rml::Input::KeyIdentifier>(Rml::Input::KI_F1 + key - KEY_F1);
 		}
 		switch (key) {
 		case KEY_ESCAPE: return Rml::Input::KI_ESCAPE;
 		case KEY_ENTER: return Rml::Input::KI_RETURN;
+		case KEY_NUMPAD_ENTER: return Rml::Input::KI_NUMPADENTER;
+		case KEY_NUMPAD_ADD: return Rml::Input::KI_ADD;
+		case KEY_NUMPAD_SUBTRACT: return Rml::Input::KI_SUBTRACT;
+		case KEY_NUMPAD_MULTIPLY: return Rml::Input::KI_MULTIPLY;
+		case KEY_NUMPAD_DIVIDE: return Rml::Input::KI_DIVIDE;
 		case KEY_TAB: return Rml::Input::KI_TAB;
 		case KEY_SPACE: return Rml::Input::KI_SPACE;
 		case KEY_BACKSPACE: return Rml::Input::KI_BACK;
