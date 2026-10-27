@@ -169,6 +169,13 @@ namespace lf {
 	void Renderer::SetScissorRegion(Rml::Rectanglei region) {
 		scissor = region;
 	}
+	void Renderer::SetTransform(const Rml::Matrix4f* transform) {
+		if (!transform) {
+			current_transform.reset();
+			return;
+		}
+		current_transform = *transform;
+	}
 	unique_ptr<Renderer::TextureData> Renderer::create_texture_data(u32 width, u32 height) {
 		unique_ptr<TextureData> texture_data = make_unique<TextureData>();
 		texture_data->size = { width, height };
@@ -219,6 +226,7 @@ namespace lf {
 			.geometry = geometry,
 			.texture = texture_data,
 			.translation = translation,
+			.transform = current_transform,
 			.scissor_position = { static_cast<u32>(left), static_cast<u32>(top) },
 			.scissor_size = { static_cast<u32>(right - left), static_cast<u32>(bottom - top) },
 		});
@@ -256,6 +264,12 @@ namespace lf {
 				for (UiVertex vertex : item.geometry->vertices) {
 					vertex.position.x += item.translation.x;
 					vertex.position.y += item.translation.y;
+					if (item.transform) {
+						// Affine UI transforms are applied after each geometry's local translation.
+						// Perspective interpolation requires homogeneous positions in the shader.
+						const Rml::Vector4f position = *item.transform * Rml::Vector4f{ vertex.position.x, vertex.position.y, 0.f, 1.f };
+						vertex.position = { position.x, position.y };
+					}
 					if (item.texture->prepared.texture) {
 						const auto& region = item.texture->prepared.region;
 						vertex.uv.x = region.pos.x + vertex.uv.x * region.dim.width;

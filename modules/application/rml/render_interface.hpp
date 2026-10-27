@@ -11,8 +11,10 @@
 #include "leaf/manager/asset.hpp"
 
 #include <RmlUi/Core/RenderInterface.h>
+#include <RmlUi/Core/Matrix4.h>
 
 #include <cstddef>
+#include <optional>
 
 namespace lf {
 	struct alignas(16) UiUniform {
@@ -40,6 +42,7 @@ namespace lf {
 		void ReleaseTexture(Rml::TextureHandle texture) override;
 		void EnableScissorRegion(bool enable) override;
 		void SetScissorRegion(Rml::Rectanglei region) override;
+		void SetTransform(const Rml::Matrix4f* transform) override;
 
 	  private:
 		struct UiVertex {
@@ -73,6 +76,7 @@ namespace lf {
 			Geometry* geometry = nullptr;
 			TextureData* texture = nullptr;
 			pos2<f32> translation{};
+			std::optional<Rml::Matrix4f> transform;
 			pos2<u32> scissor_position{};
 			dim2<u32> scissor_size{};
 		};
@@ -106,6 +110,7 @@ namespace lf {
 
 		Rml::Rectanglei scissor{};
 		bool scissor_enabled = false;
+		std::optional<Rml::Matrix4f> current_transform;
 
 		vector<QueuedGeometry> queued_geometry;
 		vector<UiVertex> batch_vertices;
