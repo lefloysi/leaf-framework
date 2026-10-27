@@ -8,7 +8,7 @@ namespace lf {
 	struct SoundGroupPrototype final : public Prototype<identifier<SoundGroupPrototype, u16, void>> {
 		static constexpr string_view type() noexcept { return "sound-group"; }
 
-		explicit SoundGroupPrototype(const dict& data) : Prototype(data) {}
+		explicit SoundGroupPrototype(const dict& data);
 
 		f32 volume = 1.0f;
 	};
@@ -28,7 +28,7 @@ namespace lf {
 		static auto get(auto& value) {
 			return group(
 				schema(PrototypeBase::base(value)),
-				field("volume", value.volume)
+				field("volume", value.volume, value.volume)
 			);
 		}
 	};
@@ -39,8 +39,8 @@ namespace lf {
 			return group(
 				schema(PrototypeBase::base(value)),
 				field("path", value.path),
-				field("sound_group", value.group),
-				field("volume", value.volume)
+				field("sound_group", value.group, value.group),
+				field("volume", value.volume, value.volume)
 			);
 		}
 	};

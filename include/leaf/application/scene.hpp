@@ -1,6 +1,7 @@
 #pragma once
 
 #include "leaf/application/window.hpp"
+#include "leaf/audio/audio.hpp"
 #include "leaf/application/color_encoding.hpp"
 #include "leaf/core/error.hpp"
 #include "leaf/core/string.hpp"
@@ -43,6 +44,7 @@ namespace lf {
 		void set_rml(const char* source, usize size);
 		Rml::ElementDocument& document();
 		sol::state& script_state();
+		Audio& audio();
 		error execute_script(string_view source);
 
 		Window& window();
@@ -73,6 +75,7 @@ namespace lf {
 		Window& display;
 		Rml::Context* context = nullptr;
 		Rml::ElementDocument* rml_document = nullptr;
+		Audio sound;
 		sol::state lua = CreateState();
 	};
 } // namespace lf

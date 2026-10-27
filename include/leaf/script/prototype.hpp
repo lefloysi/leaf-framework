@@ -116,7 +116,7 @@ namespace lf {
 		sol::table prototypes = existing.valid() && existing.is<sol::table>() ? existing.as<sol::table>() : lua.create_table();
 		sol::table records = lua.create_table();
 		for (size_t index = 0; index < database::count(); ++index) {
-			const auto id = typename Prototype::ID(static_cast<typename Prototype::ID::vnum_t>(index + 1));
+			const auto id = typename Prototype::ID(static_cast<typename Prototype::ID::vnum_t>(index));
 			const Prototype& prototype = database::get(id);
 			sol::table record = lua.create_table_with(
 				"id", id.get(),

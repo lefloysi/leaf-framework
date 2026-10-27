@@ -14,6 +14,7 @@
 #include "leaf/store/lifecycle.hpp"
 #include "leaf/system/system.hpp"
 #include <leaf/resource/registry.hpp>
+#include <leaf/resource/prototypes/sound.hpp>
 
 #include <utility>
 
@@ -50,6 +51,8 @@ namespace lf {
 		scope_exit assets_cleanup(asset::exit);
 
 		PrototypeTypeRegistry::functions.clear();
+		PrototypeTypeRegistry::RegisterType<SoundGroupPrototype>();
+		PrototypeTypeRegistry::RegisterType<SoundPrototype>();
 		Register<PrototypeTypeRegistry>::install(PrototypeTypeRegistry::instance());
 
 		if (error result = rt::init_graphics(args)) {

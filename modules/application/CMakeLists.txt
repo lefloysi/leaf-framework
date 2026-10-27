@@ -43,6 +43,7 @@ target_link_libraries("leaf-application"
         "leaf::graphics"
         "leaf::network"
         "leaf::script"
+        "leaf::audio"
         "leaf::vendor"
         "RmlUi::RmlUi"
 )

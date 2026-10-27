@@ -40,3 +40,8 @@ catch_discover_tests(leaf-binary-tests TEST_PREFIX "leaf::binary::")
 add_executable(leaf-mod-tests EXCLUDE_FROM_ALL script/mod_loader.cpp)
 target_link_libraries(leaf-mod-tests PRIVATE Catch2::Catch2WithMain leaf::core leaf::resource leaf::script leaf::system)
 catch_discover_tests(leaf-mod-tests TEST_PREFIX "leaf::mods::")
+
+add_executable("leaf-audio-tests" EXCLUDE_FROM_ALL)
+target_sources("leaf-audio-tests" PRIVATE "audio/audio.cpp")
+target_link_libraries("leaf-audio-tests" PRIVATE "leaf::audio" "Catch2::Catch2WithMain")
+catch_discover_tests("leaf-audio-tests" TEST_PREFIX "leaf::audio::")

@@ -177,6 +177,7 @@ namespace lf {
 	class SceneScriptInstaller {
 		static error install(Scene& scene) {
 			sol::state& lua = scene.script_state();
+			InstallAudioScript(lua, scene.audio());
 			lua.new_usertype<SceneElement>("leaf.scene_element", "get_value", &SceneElement::get_value, "set_value", &SceneElement::set_value, "get_inner_rml", &SceneElement::get_inner_rml, "set_inner_rml", &SceneElement::set_inner_rml, "set_text", &SceneElement::set_text, "get_property", &SceneElement::get_property, "set_property", &SceneElement::set_property, "get_attribute", &SceneElement::get_attribute, "has_attribute", &SceneElement::has_attribute, "set_attribute", &SceneElement::set_attribute, "remove_attribute", &SceneElement::remove_attribute);
 			sol::table window = lua.create_table();
 			window.set_function("set_title", [&scene](string_view title) { scene.window().set_title(title); });
@@ -314,6 +315,10 @@ namespace lf {
 			throw runtime_exception("scene has no RML document");
 		}
 		return *rml_document;
+	}
+
+	Audio& Scene::audio() {
+		return sound;
 	}
 
 	sol::state& Scene::script_state() {
@@ -599,6 +604,7 @@ namespace lf {
 		return update(events);
 	}
 	bool Scene::update(span<const input_event> events) {
+		sound.update();
 		input(events);
 		return !display.should_close();
 	}
