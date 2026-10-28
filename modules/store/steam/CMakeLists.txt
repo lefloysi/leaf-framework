@@ -14,7 +14,7 @@ target_include_directories("leaf-store-steam"
     PUBLIC "${PROJECT_SOURCE_DIR}/include"
         PRIVATE "${STEAMWORKS_SDK_DIR}/public"
 )
-target_link_libraries("leaf-store-steam" PUBLIC "leaf::store")
+target_link_libraries("leaf-store-steam" PUBLIC "leaf::store" "leaf::network")
 
 if(WIN32)
     target_link_libraries("leaf-store-steam" PRIVATE

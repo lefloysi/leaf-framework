@@ -3,6 +3,9 @@
 #include <leaf/core/logging.hpp>
 
 namespace lf {
+	bool restart_store_app(u32) {
+		return false;
+	}
 
 	error init_store(span<string_view>) {
 		log::Debug("[leaf] Starting store...");

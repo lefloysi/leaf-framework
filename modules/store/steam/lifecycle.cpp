@@ -6,6 +6,10 @@
 #include <steam/steam_api.h>
 
 namespace lf {
+	bool restart_store_app(u32 app_id) {
+		return SteamAPI_RestartAppIfNecessary(app_id);
+	}
+
 	void steam_warning_message_hook(int severity, const char* message) {
 		if (severity > 0) {
 			log::Warning("{}", lf::format("steam[{}]: {}", severity, message));
@@ -15,8 +19,9 @@ namespace lf {
 	}
 
 	error init_store(span<string_view>) {
-		if (!SteamAPI_Init()) {
-			return error("failed to initialize Steamworks");
+		SteamErrMsg message{};
+		if (SteamAPI_InitEx(&message) != k_ESteamAPIInitResult_OK) {
+			return error(lf::format("Failed to initialize Steamworks: {}", message));
 		}
 
 		SteamUtils()->SetWarningMessageHook(steam_warning_message_hook);
