@@ -1,3 +1,15 @@
+/* Shared scrollbar appearance. Overflow controls whether a scrollbar is present. */
+scrollbarvertical { width:6px; }
+scrollbarhorizontal { height:6px; }
+scrollbarvertical slider, scrollbarhorizontal slider { background:#120A1466; }
+scrollbarvertical sliderbar, scrollbarhorizontal sliderbar { background:#A8DDB0; }
+scrollbarvertical sliderbar { min-height:18px; }
+scrollbarhorizontal sliderbar { min-width:18px; }
+scrollbarvertical sliderbar:hover, scrollbarhorizontal sliderbar:hover { background:#C8EBCD; }
+scrollbarvertical sliderbar:active, scrollbarhorizontal sliderbar:active { background:#8ACD97; }
+scrollbarvertical sliderarrowdec, scrollbarvertical sliderarrowinc,
+scrollbarhorizontal sliderarrowdec, scrollbarhorizontal sliderarrowinc { width:0px; height:0px; }
+
 .window {
 	display: block;
 	position: absolute;

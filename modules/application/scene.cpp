@@ -524,7 +524,7 @@ namespace lf {
 		if (!commands) {
 			return;
 		}
-		const auto ui = record(commands);
+		const auto ui = record(commands, UiColorEncoding::linear);
 		display.begin_rendering();
 		rt::Cmd::Execute(commands, ui);
 		display.end_frame();

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "application/rml/context.hpp"
+#include "application/rml/cast_shadow.hpp"
 #include "application/rml/file_interface.hpp"
 #include "application/rml/render_interface.hpp"
 #include "application/rml/system_interface.hpp"
@@ -15,6 +16,7 @@ namespace lf {
 	struct RmlBackend {
 		Renderer renderer;
 		RmlContextInstancer context_instancer;
+		unique_ptr<CastShadowInstancer> cast_shadow_instancer;
 		RmlSystem system;
 		RmlFile file;
 		vector<unique_ptr<Rml::ElementInstancer>> instancers;

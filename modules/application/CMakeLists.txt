@@ -5,6 +5,7 @@ find_path("STB_INCLUDE_DIR" "stb_image.h" REQUIRED)
 
 add_library("leaf-application" STATIC
     "rml/backend.cpp"
+    "rml/cast_shadow.cpp"
     "rml/context.cpp"
     "rml/file_interface.cpp"
     "rml/render_interface.cpp"

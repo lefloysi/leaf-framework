@@ -46,6 +46,8 @@ namespace lf {
 		}
 
 		Rml::Factory::RegisterContextInstancer(&backend->context_instancer);
+		backend->cast_shadow_instancer = make_unique<CastShadowInstancer>();
+		Rml::Factory::RegisterDecoratorInstancer("cast-shadow", backend->cast_shadow_instancer.get());
 		if (error result = Register<RmlBackend>::install(*backend); result) {
 			Rml::Shutdown();
 			Rml::SetRenderInterface(nullptr);

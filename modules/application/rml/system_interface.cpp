@@ -2,6 +2,7 @@
 
 #include "leaf/core/logging.hpp"
 #include "leaf/platform/platform.hpp"
+#include "leaf/resource/prototypes/texture.hpp"
 
 namespace lf {
 	bool RmlSystem::LogMessage(Rml::Log::Type type, const Rml::String& message) {
@@ -24,6 +25,10 @@ namespace lf {
 	}
 
 	void RmlSystem::JoinPath(Rml::String& translated_path, const Rml::String& document_path, const Rml::String& path) {
+		if (Database<TexturePrototype>::find(path)) {
+			translated_path = path;
+			return;
+		}
 		if (string_view(path).starts_with('/')) {
 			translated_path = path;
 			return;
