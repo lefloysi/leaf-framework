@@ -1,0 +1,176 @@
+fn leaf_settings(var kiln::Target& target, kiln::Options& options) {
+	@target.option("standard", "c++latest");
+	@target.option("runtime", "MT");
+	if (options.profile() == "debug") {
+		@target.option("runtime", "MTd");
+	};
+	if (options.profile() != "debug") {
+		@target.option("compile_options", "/DNDEBUG");
+	};
+	@target.option("includes", "include;modules;RutileGraphics/include;{root}/vcpkg_installed/windows/x64-windows-static/include");
+};
+
+fn build(kiln::Options& options) {
+	var tools = kiln::add_target("leaf-build-tools", kiln::TargetType::executable);
+	leaf_settings(@tools, options);
+	@tools.sources.add("tools/build/main.cpp");
+	@tools.sources.add("tools/build/embed.cpp");
+	kiln::add_subdirectory("RutileGraphics");
+	var core = kiln::add_target("leaf-core", kiln::TargetType::static_lib);
+	leaf_settings(@core, options);
+	@core.depends_on("rutile");
+	@core.sources.add("modules/core/dynamic_object.cpp");
+	@core.sources.add("modules/core/error.cpp");
+	@core.sources.add("modules/core/exception.cpp");
+	@core.sources.add("modules/core/filesystem.cpp");
+	@core.sources.add("modules/core/fixed.cpp");
+	@core.sources.add("modules/core/logging.cpp");
+	@core.sources.add("modules/core/package.cpp");
+	@core.sources.add("modules/core/messages.cpp");
+	@core.sources.add("modules/core/profiler.cpp");
+	@core.sources.add("modules/core/progress.cpp");
+	@core.sources.add("modules/core/random.cpp");
+	@core.sources.add("modules/core/string.cpp");
+	@core.sources.add("modules/core/time.cpp");
+	@core.sources.add("modules/core/zip.cpp");
+
+	var system = kiln::add_target("leaf-system", kiln::TargetType::static_lib);
+	leaf_settings(@system, options);
+	@system.depends_on("leaf-core");
+	@system.sources.add("modules/system/crash_handler.cpp");
+	@system.sources.add("modules/system/windows/socket.cpp");
+	@system.sources.add("modules/system/windows/system.cpp");
+
+	var procedural = kiln::add_target("leaf-procedural", kiln::TargetType::static_lib);
+	leaf_settings(@procedural, options);
+	@procedural.depends_on("leaf-core");
+	@procedural.sources.add("modules/procedural/scratch.cpp");
+
+	var platform = kiln::add_target("leaf-platform", kiln::TargetType::static_lib);
+	leaf_settings(@platform, options);
+	@platform.option("defines", "LEAF_WINDOW_BACKEND_GLFW");
+	@platform.depends_on("leaf-core");
+	@platform.depends_on("leaf-system");
+	@platform.sources.add("modules/platform/desktop_glfw.cpp");
+
+	var network = kiln::add_target("leaf-network", kiln::TargetType::static_lib);
+	leaf_settings(@network, options);
+	@network.depends_on("leaf-core");
+	@network.depends_on("leaf-system");
+	@network.sources.add("modules/network/peer.cpp");
+	@network.sources.add("modules/network/channel.cpp");
+	@network.sources.add("modules/network/socket.cpp");
+
+	var lockstep = kiln::add_target("leaf-lockstep", kiln::TargetType::static_lib);
+	leaf_settings(@lockstep, options);
+	@lockstep.depends_on("leaf-core");
+	@lockstep.depends_on("leaf-network");
+	@lockstep.sources.add("modules/lockstep/session.cpp");
+	@lockstep.sources.add("modules/lockstep/host.cpp");
+	@lockstep.sources.add("modules/lockstep/remote.cpp");
+	@lockstep.sources.add("modules/lockstep/protocol.cpp");
+
+	var vendor = kiln::add_target("leaf-vendor", kiln::TargetType::static_lib);
+	leaf_settings(@vendor, options);
+	@vendor.option("compile_options", "/O2;/Ob2");
+	@vendor.sources.add("modules/vendor/stb_image.c");
+
+	var graphics = kiln::add_target("leaf-graphics", kiln::TargetType::static_lib);
+	leaf_settings(@graphics, options);
+	@graphics.depends_on("leaf-core");
+	@graphics.depends_on("leaf-platform");
+	@graphics.depends_on("rutile");
+	@graphics.sources.add("modules/graphics/antialias.cpp");
+	@graphics.sources.add("modules/graphics/buffer.cpp");
+	@graphics.sources.add("modules/graphics/command_buffer.cpp");
+	@graphics.sources.add("modules/graphics/framebuffer.cpp");
+	@graphics.sources.add("modules/graphics/graphics.cpp");
+	@graphics.sources.add("modules/graphics/graphics_program.cpp");
+	@graphics.sources.add("modules/graphics/queue.cpp");
+	@graphics.sources.add("modules/graphics/resource.cpp");
+	@graphics.sources.add("modules/graphics/rutile.cpp");
+	@graphics.sources.add("modules/graphics/sampler.cpp");
+	@graphics.sources.add("modules/graphics/swapchain.cpp");
+	@graphics.sources.add("modules/graphics/timepoint.cpp");
+	@graphics.sources.add("modules/graphics/texture.cpp");
+	@graphics.sources.add("modules/graphics/texture_view.cpp");
+
+	var manager = kiln::add_target("leaf-manager", kiln::TargetType::static_lib);
+	leaf_settings(@manager, options);
+	@manager.depends_on("leaf-core");
+	@manager.depends_on("leaf-graphics");
+	@manager.depends_on("leaf-vendor");
+	@manager.sources.add("modules/manager/texture_atlas.cpp");
+	@manager.sources.add("modules/manager/asset.cpp");
+
+	var script = kiln::add_target("leaf-script", kiln::TargetType::static_lib);
+	leaf_settings(@script, options);
+	@script.depends_on("leaf-core");
+	@script.depends_on("leaf-manager");
+	@script.sources.add("modules/script/localization.cpp");
+	@script.sources.add("modules/script/mod_enabled.cpp");
+	@script.sources.add("modules/script/mod_info.cpp");
+	@script.sources.add("modules/script/mod_loader.cpp");
+	@script.sources.add("modules/script/prototype.cpp");
+	@script.sources.add("modules/script/cursor.cpp");
+	@script.sources.add("modules/script/sound.cpp");
+	@script.sources.add("modules/script/state.cpp");
+	@script.sources.add("modules/script/interfaces.cpp");
+	@script.sources.add("modules/script/shader.cpp");
+	@script.sources.add("modules/script/texture.cpp");
+
+	var audio = kiln::add_target("leaf-audio", kiln::TargetType::static_lib);
+	leaf_settings(@audio, options);
+	@audio.depends_on("leaf-core");
+	@audio.depends_on("leaf-script");
+	@audio.sources.add("modules/audio/audio.cpp");
+	@audio.sources.add("modules/audio/miniaudio.c");
+	@audio.sources.add("modules/audio/script.cpp");
+
+	var shaders = kiln::add_target("leaf-application-shaders", kiln::TargetType::command);
+	@shaders.option("executable_target", "rtslc");
+	@shaders.option("arguments", "modules/application/shaders/application.rtsl;--module;application;--emit-program;-o;{build}/generated/leaf/application.rtslp");
+	@shaders.option("working_directory", ".");
+	@shaders.option("inputs", "modules/application/shaders/application.rtsl");
+	@shaders.option("outputs", "{build}/generated/leaf/application.rtslp");
+	var embed = kiln::add_target("leaf-application-shader-embed", kiln::TargetType::command);
+	@embed.option("executable_target", "leaf-build-tools");
+	@embed.depends_on("leaf-application-shaders");
+	@embed.option("arguments", "embed-program;{build}/generated/leaf/application.rtslp;{build}/generated/leaf/leaf_application_shader.cpp;leaf_application_shader;leaf/graphics/graphics_program;rt::program_bytes");
+	@embed.option("inputs", "{build}/generated/leaf/application.rtslp");
+	@embed.option("outputs", "{build}/generated/leaf/leaf_application_shader.cpp");
+
+	var application = kiln::add_target("leaf-application", kiln::TargetType::static_lib);
+	leaf_settings(@application, options);
+	@application.depends_on("leaf-core");
+	@application.depends_on("leaf-system");
+	@application.depends_on("leaf-platform");
+	@application.depends_on("leaf-graphics");
+	@application.depends_on("leaf-network");
+	@application.depends_on("leaf-script");
+	@application.depends_on("leaf-audio");
+	@application.depends_on("leaf-vendor");
+	@application.depends_on("leaf-application-shader-embed");
+	@application.option("generated_sources", "{build}/generated/leaf/leaf_application_shader.cpp");
+	@application.sources.add("modules/application/rml/backend.cpp");
+	@application.sources.add("modules/application/rml/cast_shadow.cpp");
+	@application.sources.add("modules/application/rml/context.cpp");
+	@application.sources.add("modules/application/rml/file_interface.cpp");
+	@application.sources.add("modules/application/rml/render_interface.cpp");
+	@application.sources.add("modules/application/rml/system_interface.cpp");
+	@application.sources.add("modules/application/scene.cpp");
+	@application.sources.add("modules/application/window.cpp");
+
+	var standalone = kiln::add_target("leaf-store-standalone", kiln::TargetType::static_lib);
+	leaf_settings(@standalone, options);
+	@standalone.depends_on("leaf-core");
+	@standalone.sources.add("modules/store/none/lifecycle.cpp");
+	@standalone.sources.add("modules/store/none/network.cpp");
+	@standalone.sources.add("modules/store/none/user.cpp");
+
+	var framework = kiln::add_target("leaf-framework", kiln::TargetType::static_lib);
+	leaf_settings(@framework, options);
+	@framework.depends_on("leaf-application");
+	@framework.depends_on("leaf-lockstep");
+	@framework.sources.add("modules/framework/leaf.cpp");
+};
