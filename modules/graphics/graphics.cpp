@@ -120,16 +120,11 @@ namespace rt {
 		return rutile_error(rtError(), "Rutile call");
 	}
 
-	error init_graphics(span<string_view> args) {
-		lf::log::Info("[leaf] Starting graphics...");
-		string graphics_api{ DefaultGraphicsAPI };
-		if (error err = parse_graphics_backend(args, graphics_api)) {
-			return err;
-		}
+	error init_graphics_backend(const string& graphics_api) {
 		lf::log::Debug("[leaf] Graphics init for '{}'", graphics_api);
 		if (rtLoad(graphics_api.data(), nullptr, 0)) {
 			lf::log::Error("[leaf] Failed to load graphics backend '{}'", graphics_api);
-			return error(generic_errc::unknown, "rtLoad failed");
+			return error(graphics_errc::initialization, lf::format("Failed to load graphics backend '{}'", graphics_api));
 		}
 
 		lf::log::Debug("[leaf] Loaded graphics backend '{}'", graphics_api);
@@ -143,15 +138,43 @@ namespace rt {
 			rtUnload();
 			return err;
 		}
+		if (error extension_error = init_graphics_extensions()) {
+			exit_graphics();
+			return extension_error;
+		}
+		return error::no_error;
+	}
+
+	error init_graphics(span<string_view> args) {
+		lf::log::Info("[leaf] Starting graphics...");
+		string graphics_api{ DefaultGraphicsAPI };
+		if (error err = parse_graphics_backend(args, graphics_api)) {
+			return err;
+		}
+		const error first_error = init_graphics_backend(graphics_api);
+		if (!first_error || graphics_api != "rt-vulkan") {
+			return first_error;
+		}
+		lf::log::Warning("[leaf] Vulkan unavailable: {}. Trying OpenGL.", first_error.message);
+		if (error fallback_error = init_graphics_backend("rt-opengl")) {
+			return error(graphics_errc::initialization, lf::format("Vulkan initialization failed: {}. OpenGL fallback failed: {}", first_error.message, fallback_error.message));
+		}
+		lf::log::Info("[leaf] Using OpenGL fallback.");
 		return error::no_error;
 	}
 
 	error init_graphics_extensions() {
 		rtLoadSwapchain();
+		if (!rt_rtSwapchainCreate) {
+			return error(graphics_errc::extension_not_present, "Required swapchain procedures are unavailable");
+		}
 		if (error err = rutile_error(rtError(), "rtLoadSwapchain")) {
 			return err;
 		}
 		rtLoadGlfwSwapchain();
+		if (!rt_rtSwapchainBindGLFW) {
+			return error(graphics_errc::extension_not_present, "Required GLFW presentation procedure is unavailable");
+		}
 		if (error err = rutile_error(rtError(), "rtLoadGlfwSwapchain")) {
 			return err;
 		}

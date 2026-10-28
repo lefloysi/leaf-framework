@@ -10,6 +10,7 @@
 namespace rt {
 	string_view GraphicsBackendName();
 
+	// Initializes presentation extensions too; Vulkan failure falls back to OpenGL.
 	error init_graphics(span<string_view> args);
 	error init_graphics_extensions();
 	bool graphics_available();

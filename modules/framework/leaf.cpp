@@ -8,6 +8,7 @@
 #include "leaf/core/span.hpp"
 #include "leaf/core/string.hpp"
 #include "leaf/application/rml.hpp"
+#include "leaf/application/window.hpp"
 #include "leaf/graphics/graphics.hpp"
 #include "leaf/manager/asset.hpp"
 #include "leaf/platform/platform.hpp"
@@ -58,16 +59,41 @@ namespace lf {
 		if (error result = rt::init_graphics(args)) {
 			throw runtime_exception(result.message);
 		}
-		scope_exit graphics_cleanup(rt::exit_graphics);
-
-		if (error result = rt::init_graphics_extensions()) {
-			throw runtime_exception(result.message);
-		}
+		scope_exit graphics_cleanup([] {
+			if (rt::graphics_available()) {
+				rt::exit_graphics();
+			}
+		});
 
 		if (error result = init_platform(args)) {
 			throw runtime_exception(result.message);
 		}
 		scope_exit platform_cleanup(exit_platform);
+
+		try {
+			// Validate a real presentation surface before Rml owns graphics resources.
+			// Window construction is hidden; no frames are rendered or presented.
+			Window probe("Graphics startup check", { 64, 64 });
+		}
+		catch (const std::exception& first_error) {
+			if (rt::GraphicsBackendName() != "rt-vulkan") {
+				throw;
+			}
+			const string reason = first_error.what();
+			log::Warning("[leaf] Vulkan presentation unavailable: {}. Trying OpenGL.", reason);
+			rt::exit_graphics();
+			string_view fallback_args[] = { "--graphics", "rt-opengl" };
+			if (error result = rt::init_graphics(fallback_args)) {
+				throw runtime_exception(lf::format("Vulkan presentation failed: {}. OpenGL fallback failed: {}", reason, result.message));
+			}
+			try {
+				Window probe("Graphics startup check", { 64, 64 });
+			}
+			catch (const std::exception& fallback_error) {
+				throw runtime_exception(lf::format("Vulkan presentation failed: {}. OpenGL presentation failed: {}", reason, fallback_error.what()));
+			}
+			log::Info("[leaf] Using OpenGL fallback after Vulkan presentation rejection.");
+		}
 
 		if (error result = init_rml(args)) {
 			throw runtime_exception(result.message);
