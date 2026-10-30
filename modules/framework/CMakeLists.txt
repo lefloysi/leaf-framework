@@ -9,4 +9,5 @@ target_link_libraries("leaf-framework" PUBLIC
     "leaf::application"
     "leaf::lockstep"
     "leaf::store"
+    "leaf::progression"
 )

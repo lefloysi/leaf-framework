@@ -1,9 +1,10 @@
-add_library("leaf-store" INTERFACE)
+add_library("leaf-store" STATIC)
+target_sources("leaf-store" PRIVATE "progression.cpp")
 add_library("leaf::store" ALIAS "leaf-store")
-target_include_directories("leaf-store" INTERFACE
+target_include_directories("leaf-store" PUBLIC
     "${PROJECT_SOURCE_DIR}/include"
 )
-target_link_libraries("leaf-store" INTERFACE "leaf::core")
+target_link_libraries("leaf-store" PUBLIC "leaf::core" "leaf::progression")
 
 add_subdirectory("none")
 

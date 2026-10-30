@@ -8,6 +8,7 @@ add_library("leaf-store-steam" STATIC
     "lifecycle.cpp"
     "network.cpp"
     "user.cpp"
+    "progression.cpp"
 )
 add_library("leaf::store-steam" ALIAS "leaf-store-steam")
 target_include_directories("leaf-store-steam"

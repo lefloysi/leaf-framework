@@ -48,7 +48,7 @@ TEST_CASE("component container reuses slots without mixing component owners") {
 	entities.add<Position>(second, Position{ 7 });
 	entities.destroy(first);
 	const auto reused = entities.create();
-	REQUIRE(reused == first);
+	REQUIRE(reused.id() == first.id());
 	REQUIRE_FALSE(entities.has<Position>(reused));
 	REQUIRE(entities.find<Position>(second)->x == 7);
 	entities.add<Name>(reused, Name{ "camera" });

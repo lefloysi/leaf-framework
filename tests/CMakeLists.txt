@@ -15,6 +15,8 @@ add_executable("leaf-tests" EXCLUDE_FROM_ALL
     "script/prototype_lua.cpp"
     "script/mod_loader.cpp"
     "script/state.cpp"
+    "progression/progression.cpp"
+    "store/progression.cpp"
 )
 
 target_link_libraries("leaf-tests" PRIVATE
@@ -23,6 +25,8 @@ target_link_libraries("leaf-tests" PRIVATE
     "leaf::resource"
     "leaf::script"
     "leaf::system"
+    "leaf::progression"
+    "leaf::store-standalone"
 )
 
 catch_discover_tests("leaf-tests"

@@ -1,6 +1,15 @@
 #include "leaf/script/prototype.hpp"
+#include <leaf/script/state.hpp>
 
 namespace lf::prototype_lua {
+	void write_value(sol::state_view lua, sol::table destination, string_view name, const object& value) {
+		destination[string(name)] = object_to_sol(lua, value);
+	}
+
+	void write_value(sol::state_view lua, sol::table destination, string_view name, const dict& value) {
+		destination[string(name)] = object_to_sol(lua, object(value));
+	}
+
 	void write_value(sol::state_view, sol::table destination, string_view name, string_view value) {
 		destination[string(name)] = string(value);
 	}

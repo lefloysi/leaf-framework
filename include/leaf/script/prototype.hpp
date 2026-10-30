@@ -17,6 +17,7 @@
 #include <optional>
 #include <string>
 #include <type_traits>
+#include <variant>
 
 namespace lf::prototype_lua {
 	void write_value(sol::state_view, sol::table destination, string_view name, string_view value);
@@ -24,6 +25,8 @@ namespace lf::prototype_lua {
 	void write_value(sol::state_view, sol::table destination, string_view name, distance value);
 	void write_value(sol::state_view, sol::table destination, string_view name, byte value);
 	void write_value(sol::state_view, sol::table destination, string_view name, u64 value);
+	void write_value(sol::state_view lua, sol::table destination, string_view name, const object& value);
+	void write_value(sol::state_view lua, sol::table destination, string_view name, const dict& value);
 
 	template<std::integral Value>
 	void write_value(sol::state_view, sol::table destination, string_view name, Value value) {
@@ -33,6 +36,13 @@ namespace lf::prototype_lua {
 	template<std::floating_point Value>
 	void write_value(sol::state_view, sol::table destination, string_view name, Value value) {
 		destination[string(name)] = value;
+	}
+
+	template<typename... Values>
+	void write_value(sol::state_view lua, sol::table destination, string_view name, const std::variant<Values...>& value) {
+		std::visit([&](const auto& active) {
+			write_value(lua, destination, name, active);
+		}, value);
 	}
 
 	template<typename ReferencedPrototype, typename ValueNumber, typename GenerationNumber>

@@ -1,0 +1,5 @@
+add_library("leaf-progression" STATIC)
+add_library("leaf::progression" ALIAS "leaf-progression")
+target_sources("leaf-progression" PRIVATE "progression.cpp")
+target_include_directories("leaf-progression" PUBLIC "${PROJECT_SOURCE_DIR}/include")
+target_link_libraries("leaf-progression" PUBLIC "leaf::core" "leaf::resource")

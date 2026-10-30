@@ -7,6 +7,7 @@
 #include <leaf/script/mod_loader.hpp>
 #include <leaf/script/prototype.hpp>
 #include <leaf/script/state.hpp>
+#include <leaf/progression/progression.hpp>
 
 #include <limits>
 
@@ -72,6 +73,35 @@ TEST_CASE("prototype Lua export provides ordered and named records") {
 	REQUIRE(record_by_name.get<u16>("id") == 1);
 
 	lf::Database<TestPrototype>::clear();
+}
+
+TEST_CASE("progression prototype export preserves numeric alternatives and condition dictionaries", "[progression]") {
+	lf::Database<lf::StatPrototype>::clear();
+	lf::Database<lf::AchievementPrototype>::clear();
+	lf::dict stat;
+	stat.emplace("name", "distance");
+	stat.emplace("value_type", "float");
+	stat.emplace("default_value", 1.25);
+	lf::Database<lf::StatPrototype>::create("distance");
+	lf::Database<lf::StatPrototype>::init("distance", stat);
+	lf::dict condition;
+	condition.emplace("type", "stat_threshold");
+	condition.emplace("stat", "distance");
+	condition.emplace("threshold", 5.5);
+	lf::dict achievement;
+	achievement.emplace("name", "walk");
+	lf::list conditions;
+	conditions.emplace_back(condition);
+	achievement.emplace("conditions", conditions);
+	lf::Database<lf::AchievementPrototype>::create("walk");
+	lf::Database<lf::AchievementPrototype>::init("walk", achievement);
+	sol::state lua;
+	lua.open_libraries(sol::lib::base);
+	lf::ExportPrototypeTable<lf::StatPrototype>(lua);
+	lf::ExportPrototypeTable<lf::AchievementPrototype>(lua);
+	REQUIRE(lua.safe_script("assert(prototypes.stat.distance.default_value == 1.25); assert(prototypes.achievement.walk.conditions[1].threshold == 5.5); assert(prototypes.achievement.walk.conditions[1].stat == 'distance')", sol::script_pass_on_error).valid());
+	lf::Database<lf::StatPrototype>::clear();
+	lf::Database<lf::AchievementPrototype>::clear();
 }
 
 TEST_CASE("Lua object conversion preserves integers and requires dense lists") {

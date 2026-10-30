@@ -16,6 +16,8 @@
 #include "leaf/system/system.hpp"
 #include <leaf/resource/registry.hpp>
 #include <leaf/resource/prototypes/sound.hpp>
+#include <leaf/resource/prototypes/stat.hpp>
+#include <leaf/resource/prototypes/achievement.hpp>
 
 #include <utility>
 
@@ -54,6 +56,8 @@ namespace lf {
 		PrototypeTypeRegistry::functions.clear();
 		PrototypeTypeRegistry::RegisterType<SoundGroupPrototype>();
 		PrototypeTypeRegistry::RegisterType<SoundPrototype>();
+		PrototypeTypeRegistry::RegisterType<StatPrototype>();
+		PrototypeTypeRegistry::RegisterType<AchievementPrototype>();
 		Register<PrototypeTypeRegistry>::install(PrototypeTypeRegistry::instance());
 
 		if (error result = rt::init_graphics(args)) {

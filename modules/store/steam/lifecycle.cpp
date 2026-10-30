@@ -2,6 +2,7 @@
 
 #include <leaf/core/format.hpp>
 #include <leaf/core/logging.hpp>
+#include <leaf/store/progression.hpp>
 
 #include <steam/steam_api.h>
 
@@ -25,6 +26,7 @@ namespace lf {
 		}
 
 		SteamUtils()->SetWarningMessageHook(steam_warning_message_hook);
+		store::initialize_store_progression();
 		return error::no_error;
 	}
 
@@ -37,6 +39,7 @@ namespace lf {
 	}
 
 	void exit_store() {
+		store::shutdown_store_progression();
 		SteamAPI_Shutdown();
 	}
 } // namespace lf
