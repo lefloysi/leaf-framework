@@ -176,6 +176,41 @@ namespace lf {
 		}
 		current_transform = *transform;
 	}
+	void Renderer::EnableClipMask(bool enable) {
+		clip_mask_enabled = enable;
+	}
+	void Renderer::RenderToClipMask(Rml::ClipMaskOperation operation, Rml::CompiledGeometryHandle handle, Rml::Vector2f translation) {
+		// Rectangular overflow clips remain axis aligned under UI translation and scaling.
+		// Arbitrary rotated, inverse, and rounded masks require a stencil implementation.
+		if (operation == Rml::ClipMaskOperation::SetInverse) {
+			return;
+		}
+		const auto* geometry = reinterpret_cast<const Geometry*>(handle);
+		if (!geometry || geometry->vertices.empty()) {
+			clip_mask_bounds = {};
+			return;
+		}
+		float left = static_cast<float>(current_framebuffer_size.width), top = static_cast<float>(current_framebuffer_size.height);
+		float right = 0, bottom = 0;
+		for (const auto& vertex : geometry->vertices) {
+			Rml::Vector4f position{ vertex.position.x + translation.x, vertex.position.y + translation.y, 0.f, 1.f };
+			if (current_transform) {
+				position = *current_transform * position;
+			}
+			left = std::min(left, position.x);
+			top = std::min(top, position.y);
+			right = std::max(right, position.x);
+			bottom = std::max(bottom, position.y);
+		}
+		if (operation == Rml::ClipMaskOperation::Intersect) {
+			left = std::max(left, static_cast<float>(clip_mask_bounds.Left()));
+			top = std::max(top, static_cast<float>(clip_mask_bounds.Top()));
+			right = std::min(right, static_cast<float>(clip_mask_bounds.Right()));
+			bottom = std::min(bottom, static_cast<float>(clip_mask_bounds.Bottom()));
+		}
+		clip_mask_bounds = Rml::Rectanglei::FromPositionSize({ static_cast<int>(std::ceil(left)), static_cast<int>(std::ceil(top)) },
+			{ std::max(0, static_cast<int>(std::floor(right) - std::ceil(left))), std::max(0, static_cast<int>(std::floor(bottom) - std::ceil(top))) });
+	}
 	unique_ptr<Renderer::TextureData> Renderer::create_texture_data(u32 width, u32 height) {
 		unique_ptr<TextureData> texture_data = make_unique<TextureData>();
 		texture_data->size = { width, height };
@@ -221,6 +256,12 @@ namespace lf {
 			top = std::clamp(scissor.Top(), 0, max_y);
 			right = std::clamp(scissor.Right(), left, max_x);
 			bottom = std::clamp(scissor.Bottom(), top, max_y);
+		}
+		if (clip_mask_enabled) {
+			left = std::clamp(clip_mask_bounds.Left(), left, right);
+			top = std::clamp(clip_mask_bounds.Top(), top, bottom);
+			right = std::clamp(clip_mask_bounds.Right(), left, right);
+			bottom = std::clamp(clip_mask_bounds.Bottom(), top, bottom);
 		}
 		queued_geometry.push_back({
 			.geometry = geometry,

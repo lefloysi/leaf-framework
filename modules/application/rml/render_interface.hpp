@@ -43,6 +43,8 @@ namespace lf {
 		void EnableScissorRegion(bool enable) override;
 		void SetScissorRegion(Rml::Rectanglei region) override;
 		void SetTransform(const Rml::Matrix4f* transform) override;
+		void EnableClipMask(bool enable) override;
+		void RenderToClipMask(Rml::ClipMaskOperation operation, Rml::CompiledGeometryHandle geometry, Rml::Vector2f translation) override;
 
 	  private:
 		struct UiVertex {
@@ -110,6 +112,8 @@ namespace lf {
 
 		Rml::Rectanglei scissor{};
 		bool scissor_enabled = false;
+		bool clip_mask_enabled = false;
+		Rml::Rectanglei clip_mask_bounds{};
 		std::optional<Rml::Matrix4f> current_transform;
 
 		vector<QueuedGeometry> queued_geometry;
