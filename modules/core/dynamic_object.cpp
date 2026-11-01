@@ -288,18 +288,22 @@ namespace lf {
 			}
 			return result;
 		}
-		try {
-			return object(node.as<bool>());
-		} catch (const YAML::Exception&) {}
-		try {
-			return object(node.as<i64>());
-		} catch (const YAML::Exception&) {}
-		try {
-			return object(node.as<u64>());
-		} catch (const YAML::Exception&) {}
-		try {
-			return object(node.as<f64>());
-		} catch (const YAML::Exception&) {}
+		bool boolean;
+		if (YAML::convert<bool>::decode(node, boolean)) {
+			return object(boolean);
+		}
+		i64 signed_integer;
+		if (YAML::convert<i64>::decode(node, signed_integer)) {
+			return object(signed_integer);
+		}
+		u64 unsigned_integer;
+		if (YAML::convert<u64>::decode(node, unsigned_integer)) {
+			return object(unsigned_integer);
+		}
+		f64 real;
+		if (YAML::convert<f64>::decode(node, real)) {
+			return object(real);
+		}
 		return object(node.as<string>());
 	}
 

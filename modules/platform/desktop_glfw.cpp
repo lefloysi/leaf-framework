@@ -8,7 +8,14 @@
 #include "leaf/graphics/resource.hpp"
 
 #define GLFW_INCLUDE_NONE
+#if defined(__APPLE__)
+#include <vulkan/vulkan_core.h>
+#include <dlfcn.h>
+#endif
 #include <GLFW/glfw3.h>
+#if defined(__APPLE__) && (GLFW_VERSION_MAJOR < 3 || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR < 4))
+#error "The macOS MoltenVK integration requires GLFW 3.4 or newer (glfwInitVulkanLoader)."
+#endif
 
 #include <rt_glfw_swapchain.h>
 #include <rt_swapchain.h>
@@ -29,6 +36,39 @@
 #include <vector>
 
 namespace lf {
+#if defined(__APPLE__)
+	// GLFW retains this entry point across initialization cycles.
+	void* platform_moltenvk_module;
+
+	bool initialize_moltenvk_provider() {
+		if (!platform_moltenvk_module) {
+			const char* paths[] = {
+				"@executable_path/libMoltenVK.dylib",
+				"@rpath/libMoltenVK.dylib",
+				"libMoltenVK.dylib",
+				"MoltenVK.framework/MoltenVK",
+			};
+			for (const char* path : paths) {
+				platform_moltenvk_module = dlopen(path, RTLD_NOW | RTLD_LOCAL);
+				if (platform_moltenvk_module) {
+					break;
+				}
+			}
+		}
+		if (!platform_moltenvk_module) {
+			log::Error("[leaf] MoltenVK could not be loaded; deploy libMoltenVK.dylib beside the executable");
+			return false;
+		}
+		auto get_instance_proc_addr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(dlsym(platform_moltenvk_module, "vkGetInstanceProcAddr"));
+		if (!get_instance_proc_addr) {
+			log::Error("[leaf] MoltenVK does not export vkGetInstanceProcAddr");
+			return false;
+		}
+		glfwInitVulkanLoader(get_instance_proc_addr);
+		return true;
+	}
+#endif
+
 	struct PlatformWindow {
 		GLFWwindow* native = nullptr;
 		Window* owner = nullptr;
@@ -368,6 +408,11 @@ namespace lf {
 	error init_platform(span<string_view> args) {
 		log::Info("[leaf] Starting platform...");
 		Platform::instance().initialize();
+#if defined(__APPLE__)
+		if (!initialize_moltenvk_provider()) {
+			return error::unknown_error;
+		}
+#endif
 		if (!glfwInit()) {
 			return error::unknown_error;
 		}

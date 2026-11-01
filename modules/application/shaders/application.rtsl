@@ -1,3 +1,5 @@
+import <std>;
+
 struct UiDraw {
 	vec2 viewport_size;
 	vec2 translation;
@@ -10,20 +12,20 @@ var texture_2d<f32> UiTexture;
 var buffer<void, f32> ui_color_decode;
 
 fn decode_channel(f32 value) -> f32 {
-	if (value <= 0.0) { return ui_color_decode[0]; }
-	if (value >= 1.0) { return ui_color_decode[4096]; }
+	if (value <= 0.0) { return ui_color_decode[0]; };
+	if (value >= 1.0) { return ui_color_decode[4096]; };
 	var f32 scaled = value * 4096.0;
 	var usize index = usize(scaled);
 	var f32 fraction = scaled - f32(index);
 	return ui_color_decode[index] * (1.0 - fraction) + ui_color_decode[index + 1] * fraction;
-}
+};
 
 fn linear_color(vec4 color, bool premultiplied) -> vec4 {
-	if (color.w <= 0.0) { return vec4(0.0, 0.0, 0.0, 0.0); }
+	if (color.w <= 0.0) { return vec4(0.0, 0.0, 0.0, 0.0); };
 	var f32 divisor = 1.0;
-	if (premultiplied) { divisor = color.w; }
+	if (premultiplied) { divisor = color.w; };
 	return vec4(decode_channel(color.x / divisor) * color.w, decode_channel(color.y / divisor) * color.w, decode_channel(color.z / divisor) * color.w, color.w);
-}
+};
 
 struct Point {
 	vec2 position;
@@ -35,32 +37,32 @@ struct Vertex : Position {
 	vec2 uv;
 	vec4 color;
 
-	fn Vertex(Point point) {
+	fn Vertex(var Vertex& this, Point point) {
 		var vec2 pixel = point.position + ui_draw.translation;
 		position = vec4(pixel.x / ui_draw.viewport_size.x * 2.0 - 1.0, 1.0 - pixel.y / ui_draw.viewport_size.y * 2.0, 0.0, 1.0);
 		uv = point.uv;
 		color = point.color;
-	}
+	};
 };
 
-@stage : vertex
+[[stage : vertex]]
 fn rml(Point point) -> Vertex {
 	return Vertex(point);
-}
+};
 
-@stage : fragment
-fn rml(Vertex vertex{.uv : smooth, .color : smooth}) -> vec4 {
+[[stage : fragment]]
+fn rml([[smooth(uv, color)]] Vertex vertex) -> vec4 {
 	var vec4 color = vertex.color;
-	if (ui_draw.output_linear > 0.5) { color = linear_color(color, 1.0 > 0.0); }
+	if (ui_draw.output_linear > 0.5) { color = linear_color(color, 1.0 > 0.0); };
 	if (ui_draw.texture_mode < 0.5) {
 		return color;
-	}
+	};
 	var vec4 texture_color = sample(UiTexture, vertex.uv);
-	if (ui_draw.output_linear > 0.5) { texture_color = linear_color(texture_color, ui_draw.texture_mode < 1.5); }
+	if (ui_draw.output_linear > 0.5) { texture_color = linear_color(texture_color, ui_draw.texture_mode < 1.5); };
 	return vec4(
 		texture_color.x * color.x,
 		texture_color.y * color.y,
 		texture_color.z * color.z,
 		texture_color.w * color.w
 	);
-}
+};

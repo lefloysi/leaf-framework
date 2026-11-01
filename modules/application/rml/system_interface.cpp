@@ -1,3 +1,4 @@
+#include "leaf/resource/prototypes/icon.hpp"
 #include "application/rml/system_interface.hpp"
 
 #include "leaf/core/logging.hpp"
@@ -25,7 +26,7 @@ namespace lf {
 	}
 
 	void RmlSystem::JoinPath(Rml::String& translated_path, const Rml::String& document_path, const Rml::String& path) {
-		if (Database<TexturePrototype>::find(path)) {
+		if (Database<IconPrototype>::find(path) || Database<TexturePrototype>::find(path)) {
 			translated_path = path;
 			return;
 		}

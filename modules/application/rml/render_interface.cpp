@@ -1,3 +1,4 @@
+#include "leaf/resource/prototypes/icon.hpp"
 #include "application/rml/render_interface.hpp"
 #include "leaf/core/array.hpp"
 #include "leaf/core/filesystem.hpp"
@@ -121,14 +122,16 @@ namespace lf {
 		delete reinterpret_cast<Geometry*>(geometry);
 	}
 	Rml::TextureHandle Renderer::LoadTexture(Rml::Vector2i& texture_dimensions, const Rml::String& source) {
-		const TexturePrototype::ID texture_id = Database<TexturePrototype>::find(source);
-		if (!texture_id) {
-			log::Warning("[rml] texture '{}' is not a TexturePrototype", source);
+		const auto icon_id = Database<IconPrototype>::find(source);
+		const auto texture_id = Database<TexturePrototype>::find(source);
+		if (!icon_id && !texture_id) {
+			log::Warning("[rml] image '{}' is not an icon or texture prototype", source);
 			return 0;
 		}
-		const TexturePrototype& prototype = Database<TexturePrototype>::get(texture_id);
+		const auto kind = icon_id ? atlas_image_kind::icon : atlas_image_kind::texture;
+		const u32 image_id = icon_id ? static_cast<u32>(icon_id) : static_cast<u32>(texture_id);
 		for (const packed_atlas_frame& packed : loaded_texture_atlas().frames) {
-			if (packed.texture_index != static_cast<u32>(texture_id) || packed.frame_index != 0) { continue; }
+			if (packed.kind != kind || packed.texture_index != image_id || packed.frame_index != 0) { continue; }
 			textures.emplace_back(make_unique<TextureData>());
 			TextureData& texture = *textures.back();
 			texture.prepared = { loaded_texture_atlas().view, loaded_texture_atlas().sampler, packed.rect, packed.size };
@@ -136,7 +139,7 @@ namespace lf {
 			texture_dimensions = { static_cast<i32>(texture.size.width), static_cast<i32>(texture.size.height) };
 			return reinterpret_cast<Rml::TextureHandle>(&texture);
 		}
-		log::Warning("[rml] TexturePrototype '{}' has no packed first frame", Database<TexturePrototype>::name(prototype.id));
+		log::Warning("[rml] image '{}' has no packed first frame", source);
 		return 0;
 	}
 	Rml::TextureHandle Renderer::GenerateTexture(Rml::Span<const Rml::byte> source, Rml::Vector2i source_dimensions) {

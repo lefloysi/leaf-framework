@@ -43,6 +43,7 @@ namespace lf {
 		rect<u32> source{};
 		rect<u32> image_region{};
 		stbrp_rect destination{};
+		atlas_image_kind kind = atlas_image_kind::texture;
 	};
 
 	struct atlas_upload_group {
@@ -122,7 +123,7 @@ namespace lf {
 				continue;
 			}
 
-			atlas_frame frame{ .texture_index = source.texture_index, .frame_index = source.frame_index, .path = source.path, .bytes = bytes_it->second };
+			atlas_frame frame{ .texture_index = source.texture_index, .frame_index = source.frame_index, .path = source.path, .bytes = bytes_it->second, .kind = source.kind };
 			frame.image_region = { {}, { safe_cast<u32>(image_width), safe_cast<u32>(image_height) } };
 			if (source.rect.dim.width == 0 || source.rect.dim.height == 0) {
 				const u32 width = safe_cast<u32>(image_width);
@@ -261,7 +262,7 @@ namespace lf {
 	}
 
 	packed_atlas_frame packed_frame_from(const atlas_frame& frame, u32 atlas_width, u32 atlas_height, u32 padding) {
-		return { .texture_index = frame.texture_index, .frame_index = frame.frame_index, .rect = { .pos = { .x = safe_cast<f32>(frame.destination.x + safe_cast<i32>(padding)) / safe_cast<f32>(atlas_width), .y = safe_cast<f32>(frame.destination.y + safe_cast<i32>(padding)) / safe_cast<f32>(atlas_height) }, .dim = { .width = safe_cast<f32>(frame.source.dim.width) / safe_cast<f32>(atlas_width), .height = safe_cast<f32>(frame.source.dim.height) / safe_cast<f32>(atlas_height) } }, .size = frame.source.dim };
+		return { .texture_index = frame.texture_index, .frame_index = frame.frame_index, .rect = { .pos = { .x = safe_cast<f32>(frame.destination.x + safe_cast<i32>(padding)) / safe_cast<f32>(atlas_width), .y = safe_cast<f32>(frame.destination.y + safe_cast<i32>(padding)) / safe_cast<f32>(atlas_height) }, .dim = { .width = safe_cast<f32>(frame.source.dim.width) / safe_cast<f32>(atlas_width), .height = safe_cast<f32>(frame.source.dim.height) / safe_cast<f32>(atlas_height) } }, .size = frame.source.dim, .kind = frame.kind };
 	}
 
 	usize atlas_frame_upload_bytes(

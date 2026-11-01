@@ -10,11 +10,13 @@
 #include "leaf/graphics/resource.hpp"
 
 namespace lf {
+	enum class atlas_image_kind : u08 { texture, icon };
 	struct atlas_source_frame {
 		u32 texture_index = 0;
 		u32 frame_index = 0;
 		string path;
 		lf::rect<u32> rect{};
+		atlas_image_kind kind = atlas_image_kind::texture;
 	};
 
 	struct packed_atlas_frame {
@@ -22,6 +24,7 @@ namespace lf {
 		u32 frame_index = 0;
 		lf::rect<f32> rect{};
 		dim2<u32> size{};
+		atlas_image_kind kind = atlas_image_kind::texture;
 	};
 
 	struct texture_atlas_options {

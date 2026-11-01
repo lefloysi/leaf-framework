@@ -1,3 +1,4 @@
+#include "leaf/resource/prototypes/icon.hpp"
 #include "leaf/script/mod_loader.hpp"
 
 #include "leaf/core/filesystem.hpp"
@@ -102,6 +103,18 @@ namespace lf {
 					.frame_index = static_cast<u32>(frame_index),
 					.path = frame.path,
 					.rect = frame.rect
+				});
+			}
+		}
+		for (const IconPrototype& icon : Database<IconPrototype>::prototypes) {
+			for (usize frame_index = 0; frame_index < icon.frames.size(); ++frame_index) {
+				const auto& frame = Database<TextureFramePrototype>::get(icon.frames[frame_index]);
+				frames.push_back({
+					.texture_index = static_cast<u32>(icon.id),
+					.frame_index = static_cast<u32>(frame_index),
+					.path = frame.path,
+					.rect = frame.rect,
+					.kind = atlas_image_kind::icon
 				});
 			}
 		}
@@ -435,6 +448,95 @@ namespace lf {
 		}
 		return result;
 	}
+	void extend_prototype_lua(sol::state& lua, sol::table raw, sol::table prototype, usize depth = 0);
+
+	void expand_inline_prototypes(sol::state& lua, sol::table raw, sol::table values, string_view owner, string_view path, const sol::object& mod, usize depth) {
+		if (depth > 64) {
+			throw runtime_exception(lf::format("inline prototype nesting is too deep in '{}'", owner));
+		}
+		vector<sol::object> keys;
+		for (const auto& entry : values) {
+			keys.push_back(entry.first);
+		}
+		std::sort(keys.begin(), keys.end(), [](const sol::object& first, const sol::object& second) {
+			if (first.is<usize>() && second.is<usize>()) {
+				return first.as<usize>() < second.as<usize>();
+			}
+			if (first.is<usize>() != second.is<usize>()) {
+				return first.is<usize>();
+			}
+			return first.as<string>() < second.as<string>();
+		});
+		for (const auto& key : keys) {
+			const sol::object value = values.get<sol::object>(key);
+			if (!value.is<sol::table>()) {
+				continue;
+			}
+			auto nested = value.as<sol::table>();
+			const auto segment = key.is<usize>() ? std::to_string(key.as<usize>()) : key.as<string>();
+			const auto nested_path = path.empty() ? segment : lf::format("{}:{}", path, segment);
+			const sol::object type = nested.get<sol::object>("type");
+			if (!type.is<string>() || !raw.get<sol::object>(type.as<string>()).is<sol::table>()) {
+				expand_inline_prototypes(lua, raw, nested, owner, nested_path, mod, depth + 1);
+				continue;
+			}
+			const auto name = key.is<usize>() ? lf::format("{}:{}", owner, nested_path) : lf::format("{}:{}:1", owner, nested_path);
+			nested["name"] = name;
+			if (!nested.get<sol::object>("mod").valid()) {
+				nested["mod"] = mod;
+			}
+			extend_prototype_lua(lua, raw, nested, depth + 1);
+			values[key] = name;
+		}
+	}
+
+	void extend_prototype_lua(sol::state& lua, sol::table raw, sol::table prototype, usize depth) {
+		if (!prototype.get<sol::object>("mod").valid()) {
+			prototype["mod"] = lua["__leaf_current_mod"];
+		}
+		const auto type = prototype.get<string>("type");
+		const auto name = prototype.get<string>("name");
+		const auto table = raw.get<sol::object>(type);
+		if (!table.is<sol::table>()) {
+			throw runtime_exception(lf::format("data.raw[{}] does not exist", type));
+		}
+		auto entries = table.as<sol::table>();
+		if (entries.get<sol::object>(name).valid()) {
+			throw runtime_exception(lf::format("duplicate prototype '{}/{}'", type, name));
+		}
+		expand_inline_prototypes(lua, raw, prototype, name, "", prototype.get<sol::object>("mod"), depth);
+		if (type == TexturePrototype::type() || type == IconPrototype::type()) {
+			const sol::object frame_object = prototype.get<sol::object>("frames");
+			if (frame_object.get_type() != sol::type::nil) {
+				if (!frame_object.is<sol::table>()) {
+					throw runtime_exception(lf::format("texture '{}/{}' frames must be a table", type, name));
+				}
+				sol::table frames = frame_object.as<sol::table>();
+				sol::table frame_table = raw.get<sol::table>(TextureFramePrototype::type());
+				for (usize index = 1; index <= frames.size(); ++index) {
+					const sol::object source = frames.get<sol::object>(index);
+					if (source.is<string>() && frame_table.get<sol::object>(source.as<string>()).valid()) {
+						continue;
+					}
+					const string frame_name = lf::format("{}:frames:{}", name, index);
+					sol::table frame = lua.create_table_with("type", TextureFramePrototype::type(), "name", frame_name, "mod", prototype["mod"]);
+					if (source.is<string>()) {
+						frame["path"] = source.as<string>();
+					} else if (source.is<sol::table>()) {
+						auto definition = source.as<sol::table>();
+						frame["path"] = definition.get<string>("path");
+						frame["rect"] = definition.get<sol::object>("rect");
+					} else {
+						throw runtime_exception(lf::format("texture '{}/{}' frame {} is not a source path", type, name, index));
+					}
+					extend_prototype_lua(lua, raw, frame, depth + 1);
+					frames[index] = frame_name;
+				}
+			}
+		}
+		entries[name] = prototype;
+	}
+
 	void initialize_prototype_lua(sol::state& lua, const dict& startup_settings) {
 		lua.open_libraries(sol::lib::base, sol::lib::math, sol::lib::string, sol::lib::table);
 		auto data = lua.create_named_table("data");
@@ -443,46 +545,7 @@ namespace lf {
 			auto raw = self.get<sol::table>("raw");
 			for (usize index = 1; index <= prototypes.size(); ++index) {
 				auto prototype = prototypes.get<sol::table>(index);
-				if (!prototype.get<sol::object>("mod").valid()) { prototype["mod"] = lua["__leaf_current_mod"]; }
-				const auto type = prototype.get<string>("type");
-				const auto name = prototype.get<string>("name");
-				if (type == TexturePrototype::type()) {
-					const sol::object frame_object = prototype.get<sol::object>("frames");
-					if (frame_object.get_type() != sol::type::nil) {
-						if (!frame_object.is<sol::table>()) { throw runtime_exception(lf::format("texture '{}/{}' frames must be a table", type, name)); }
-
-						sol::table frames = frame_object.as<sol::table>();
-						sol::table frame_table = raw.get<sol::table>(TextureFramePrototype::type());
-						for (usize frame_index = 1; frame_index <= frames.size(); ++frame_index) {
-							const string frame_name = lf::format("{}-{}", name, frame_index);
-							if (frame_table.get<sol::object>(frame_name).valid()) { throw runtime_exception(lf::format("duplicate prototype '{}/{}'", TextureFramePrototype::type(), frame_name)); }
-
-							sol::table frame = lua.create_table();
-							frame["type"] = TextureFramePrototype::type();
-							frame["name"] = frame_name;
-							frame["mod"] = prototype["mod"];
-
-							const sol::object source = frames.get<sol::object>(frame_index);
-							if (source.is<string>()) {
-								frame["path"] = source.as<string>();
-							} else if (source.is<sol::table>()) {
-								sol::table source_frame = source.as<sol::table>();
-								frame["path"] = source_frame.get<string>("path");
-								frame["rect"] = source_frame.get<sol::object>("rect");
-							} else {
-								throw runtime_exception(lf::format("texture '{}/{}' frame {} is not a source path", type, name, frame_index));
-							}
-
-							frame_table[frame_name] = frame;
-							frames[frame_index] = frame_name;
-						}
-					}
-				}
-				const auto table = raw.get<sol::object>(type);
-				if (!table.is<sol::table>()) { throw runtime_exception(lf::format("data.raw[{}] does not exist", type)); }
-				auto entries = table.as<sol::table>();
-				if (entries.get<sol::object>(name).valid()) { throw runtime_exception(lf::format("duplicate prototype '{}/{}'", type, name)); }
-				entries[name] = prototype;
+				extend_prototype_lua(lua, raw, prototype);
 			}
 		});
 		auto option = lua.create_named_table("option");
