@@ -289,5 +289,6 @@ fn build(kiln::Options& options) {
 	@framework.depends_on("leaf-application");
 	@framework.depends_on("leaf-lockstep");
 	@framework.depends_on("leaf-progression");
+	@framework.depends_on("leaf-store");
 	@framework.sources.add("modules/framework/leaf.cpp");
 };
