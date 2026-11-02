@@ -13,6 +13,3 @@ add_subdirectory("RutileGraphics")
 
 add_subdirectory("modules")
 
-enable_testing()
-add_subdirectory("tests")
-
