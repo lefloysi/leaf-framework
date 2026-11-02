@@ -4,11 +4,13 @@ if(NOT EXISTS "${STEAMWORKS_SDK_DIR}/public/steam/steam_api.h")
     message(FATAL_ERROR "STEAMWORKS_SDK_DIR is missing or invalid: ${STEAMWORKS_SDK_DIR}")
 endif()
 
-add_library("leaf-store-steam" STATIC
+add_library("leaf-store-steam" STATIC)
+target_sources("leaf-store-steam" PRIVATE
     "lifecycle.cpp"
     "network.cpp"
     "user.cpp"
     "progression.cpp"
+    "workshop.cpp"
 )
 add_library("leaf::store-steam" ALIAS "leaf-store-steam")
 target_include_directories("leaf-store-steam"

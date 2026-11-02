@@ -3,6 +3,7 @@
 #include <leaf/core/format.hpp>
 #include <leaf/core/logging.hpp>
 #include <leaf/store/progression.hpp>
+#include <leaf/store/workshop.hpp>
 
 #include <steam/steam_api.h>
 
@@ -39,6 +40,7 @@ namespace lf {
 	}
 
 	void exit_store() {
+		store::shutdown_store_workshop();
 		store::shutdown_store_progression();
 		SteamAPI_Shutdown();
 	}
