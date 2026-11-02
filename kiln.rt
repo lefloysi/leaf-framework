@@ -35,6 +35,9 @@ fn leaf_packages(kiln::Options& options) -> void | kiln::configuration_error | r
 	var sol = vcpkg::package("sol2");
 	@sol.option("headers", "sol/sol.hpp");
 	@sol.option("requires", "lua");
+	var freetype = vcpkg::package("freetype2");
+	@freetype.option("port", "freetype");
+	@freetype.option("pkgconfig", "freetype2");
 	var rml = vcpkg::package("rmlui");
 	@rml.option("headers", "RmlUi/Core.h");
 	if (options.os() == "windows") {
