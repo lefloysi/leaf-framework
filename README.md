@@ -4,6 +4,25 @@ leaf-framework is a C++23 framework for application loops, RML scene support, Lu
 
 This directory is also a standalone CMake project, so Leaf can be built independently from the game.
 
+## Kiln configuration
+
+A parent project passes ordinary Kiln options into Leaf's configuration:
+
+```rutile
+kiln::Options leaf_options = options;
+@leaf_options.set("storefront", "steam");
+kiln::add_subdirectory("leaf-framework", leaf_options);
+```
+
+Leaf accepts `storefront=none` (the default) or `storefront=steam`. Steam requires
+`STEAMWORKS_SDK_DIR`; Leaf declares its SDK headers, library, and runtime files.
+The `cxx` and `linker` choices select the installed compiler and linker, initially MSVC
+`cl` and `link`. Shared runtime and optimization policy comes from Kiln profiles.
+
+Leaf exports its public headers and required dependency headers through target usage.
+Its `modules` directory remains private. Leaf also owns application shader compilation
+and the runtime files under `leaf/application`.
+
 ## Layout
 
 - `include/leaf` contains the public headers and `modules` contains the framework implementation. Modules include `application`, `audio`, `core`, `framework`, `graphics`, `lockstep`, `math`, `network`, `platform`, `pmg`, `resource`, `script`, `store`, and `system`.

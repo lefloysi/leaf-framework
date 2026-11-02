@@ -1,27 +1,30 @@
-fn leaf_settings(var kiln::Target& target, kiln::Options& options) {
-	@target.option("standard", "c++latest");
-	if (options.os() == "windows") {
-		@target.option("runtime", "MT");
-		if (options.profile() == "debug") {
-			@target.option("runtime", "MTd");
-		};
-	};
-	@target.option("includes", "include;modules;RutileGraphics/include");
+fn leaf_settings(var kiln::Target& target, kiln::Options& options) -> void | kiln::configuration_error | rt::allocation_error {
+	rt::string compiler = options.value("cxx", "cl");
+	rt::string linker = options.value("linker", "link");
+	cpp::Settings settings = cpp::settings();
+	@settings.compiler(compiler);
+	@settings.standard("c++latest");
+	@settings.private_includes.add("modules");
+	@settings.public_includes.add("include");
+	rt::string glm_prefix = options.package_prefix("glm");
+	@settings.public_includes.add(glm_prefix + "/include");
+	@target.compilers.add(cpp::compiler, settings);
+	@target.linker(linker);
 	@target.package("glm");
 };
 
-fn leaf_packages(kiln::Options& options) {
-	var glm = kiln::add_package("glm");
+fn leaf_packages(kiln::Options& options) -> void | kiln::configuration_error | rt::allocation_error {
+	var glm = vcpkg::package("glm");
 	@glm.option("headers", "glm/glm.hpp");
 	if (options.os() == "windows") {
 		@glm.option("libraries", "glm.lib");
 	};
-	var zip = kiln::add_package("libzip");
+	var zip = vcpkg::package("libzip");
 	@zip.option("pkgconfig", "libzip");
 	if (options.os() == "windows") {
 		@zip.option("link_options", "advapi32.lib;bcrypt.lib");
 	};
-	var lua = kiln::add_package("lua");
+	var lua = vcpkg::package("lua");
 	@lua.option("headers", "lua.hpp");
 	if (options.os() == "windows") {
 		@lua.option("libraries", "lua.lib");
@@ -29,10 +32,10 @@ fn leaf_packages(kiln::Options& options) {
 	else {
 		@lua.option("libraries", "liblua.a");
 	};
-	var sol = kiln::add_package("sol2");
+	var sol = vcpkg::package("sol2");
 	@sol.option("headers", "sol/sol.hpp");
 	@sol.option("requires", "lua");
-	var rml = kiln::add_package("rmlui");
+	var rml = vcpkg::package("rmlui");
 	@rml.option("headers", "RmlUi/Core.h");
 	if (options.os() == "windows") {
 		@rml.option("libraries", "rmlui.lib;rmlui_debugger.lib");
@@ -41,15 +44,15 @@ fn leaf_packages(kiln::Options& options) {
 		@rml.option("libraries", "librmlui.a;librmlui_debugger.a");
 	};
 	@rml.option("requires", "freetype2");
-	var stb = kiln::add_package("stb");
+	var stb = vcpkg::package("stb");
 	@stb.option("headers", "stb_image.h");
-	var magic = kiln::add_package("magic_enum");
+	var magic = vcpkg::package("magic_enum");
 	@magic.option("headers", "magic_enum/magic_enum.hpp");
-	var audio = kiln::add_package("miniaudio");
+	var audio = vcpkg::package("miniaudio");
 	@audio.option("headers", "miniaudio.h");
-	var checks = kiln::add_package("catch2-with-main");
+	var checks = vcpkg::package("catch2-with-main");
 	@checks.option("pkgconfig", "catch2-with-main");
-	var runtime = kiln::add_package("leaf-runtime");
+	var runtime = vcpkg::package("leaf-runtime");
 	@runtime.option("requires", "CLI11;yaml-cpp;glfw3;lua;sol2;rmlui;glm;libzip;stb;magic_enum;miniaudio;zlib");
 	if (options.os() == "windows") {
 		@runtime.option("link_options", "ws2_32.lib;advapi32.lib;bcrypt.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib");
@@ -62,13 +65,14 @@ fn leaf_packages(kiln::Options& options) {
 			@runtime.option("link_options", "-ldl;-pthread");
 		};
 	};
-	if (options.value("storefront", "standalone") == "steam") {
+	rt::string storefront = options.value("storefront", "none");
+	if (storefront == "steam") {
 		rt::string sdk = rt::environment("STEAMWORKS_SDK_DIR");
 		if (sdk.empty()) {
 			kiln::error("The Steam storefront requires STEAMWORKS_SDK_DIR.");
 			return;
 		};
-		var steam = kiln::add_package("steamworks");
+		var steam = vcpkg::package("steamworks");
 		@steam.option("prefix", sdk);
 		@steam.option("include_directory", "public");
 		@steam.option("headers", "steam/steam_api.h");
@@ -92,9 +96,12 @@ fn leaf_packages(kiln::Options& options) {
 	};
 };
 
-fn build(kiln::Options& options) {
+fn build(kiln::Options& options) -> void | kiln::configuration_error | rt::allocation_error {
+	kiln::load("cpp", &cpp::load);
+	kiln::load("rtsl", &rtsl::load);
+	kiln::load("vcpkg", &vcpkg::load);
 	leaf_packages(options);
-	kiln::add_subdirectory("RutileGraphics");
+	kiln::add_subdirectory("RutileGraphics", options);
 	var core = kiln::add_target("leaf-core", kiln::TargetType::static_lib);
 	leaf_settings(@core, options);
 	@core.package("libzip");
@@ -121,6 +128,7 @@ fn build(kiln::Options& options) {
 	@system.depends_on("leaf-core");
 	@system.sources.add("modules/system/crash_handler.cpp");
 	if (options.os() == "windows") {
+		@system.option("libraries", "ws2_32.lib;user32.lib;shell32.lib");
 		@system.sources.add("modules/system/windows");
 	}
 	else {
@@ -202,6 +210,10 @@ fn build(kiln::Options& options) {
 
 	var script = kiln::add_target("leaf-script", kiln::TargetType::static_lib);
 	leaf_settings(@script, options);
+	rt::string sol_prefix = options.package_prefix("sol2");
+	rt::string lua_prefix = options.package_prefix("lua");
+	rt::string glm_prefix = options.package_prefix("glm");
+	@script.option("public_includes", "include;" + glm_prefix + "/include;" + sol_prefix + "/include;" + lua_prefix + "/include");
 	@script.package("sol2");
 	@script.package("stb");
 	@script.package("magic_enum");
@@ -231,6 +243,8 @@ fn build(kiln::Options& options) {
 
 	var application = kiln::add_target("leaf-application", kiln::TargetType::static_lib);
 	leaf_settings(@application, options);
+	rt::string rml_prefix = options.package_prefix("rmlui");
+	@application.option("public_includes", "include;" + glm_prefix + "/include;" + rml_prefix + "/include");
 	@application.package("rmlui");
 	@application.package("sol2");
 	@application.package("stb");
@@ -242,13 +256,12 @@ fn build(kiln::Options& options) {
 	@application.depends_on("leaf-script");
 	@application.depends_on("leaf-audio");
 	@application.depends_on("leaf-vendor");
-	@application.depends_on("rtslc");
-	@application.sources.add("modules/application/shaders/application.rtsl");
-	@application.option("rtsl_compiler", "{artifact:rtslc}");
-	@application.option("rtsl_module", "application");
-	@application.option("rtsl_symbol", "leaf_application_shader");
-	@application.option("rtsl_header", "leaf/graphics/graphics_program.hpp");
-	@application.option("rtsl_type", "rt::program_bytes");
+	rtsl::Program application_shaders = rtsl::program("leaf-application-shaders");
+	@application_shaders.sources.add("modules/application/shaders/application.rtsl");
+	@application_shaders.module("application");
+	@application_shaders.symbol("leaf_application_shader");
+	@application.depends_on(application_shaders);
+	@application.runtime.directory("modules/application/assets", "leaf/application");
 	@application.sources.add("modules/application/rml/backend.cpp");
 	@application.sources.add("modules/application/rml/cast_shadow.cpp");
 	@application.sources.add("modules/application/rml/context.cpp");
@@ -268,15 +281,15 @@ fn build(kiln::Options& options) {
 	@store.depends_on("leaf-core");
 	@store.depends_on("leaf-progression");
 	@store.sources.add("modules/store/progression.cpp");
-	var storefront = options.value("storefront", "standalone");
+	rt::string storefront = options.value("storefront", "none");
 	if (storefront == "steam") {
 		@store.package("steamworks");
 		@store.depends_on("leaf-network");
 		@store.sources.add("modules/store/steam");
 	}
 	else {
-		if (storefront != "standalone") {
-			kiln::error("Storefront must be standalone or steam.");
+		if (storefront != "none") {
+			kiln::error("Storefront must be none or steam.");
 			return;
 		};
 		@store.sources.add("modules/store/none");
