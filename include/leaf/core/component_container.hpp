@@ -11,6 +11,7 @@
 #include <concepts>
 #include <tuple>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 
 namespace lf {
@@ -165,6 +166,7 @@ namespace lf {
 			vector<Entity> entities;
 
 			void record(const component_container& source, Handle id);
+			void record_many(const component_container& source, span<const Handle> ids);
 			void record_all(const component_container& source);
 			void merge(const Changes& other);
 			void apply(component_container& destination) const;
