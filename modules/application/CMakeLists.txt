@@ -15,20 +15,11 @@ add_library("leaf-application" STATIC
 )
 add_library("leaf::application" ALIAS "leaf-application")
 
-if(CMAKE_CONFIGURATION_TYPES)
-    set(LEAF_APPLICATION_RESOURCE_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>/leaf/application")
-else()
-    set(LEAF_APPLICATION_RESOURCE_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/leaf/application")
-endif()
-add_custom_target("leaf-application-assets"
-    COMMAND "${CMAKE_COMMAND}" -E make_directory "${LEAF_APPLICATION_RESOURCE_DIR}"
-    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/assets/window.rcss"
-        "${LEAF_APPLICATION_RESOURCE_DIR}/window.rcss"
-    VERBATIM
-)
-add_dependencies("leaf-application" "leaf-application-assets")
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/window.rcss" DESTINATION "leaf/application")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/window.rcss")
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/assets/window.rcss" LEAF_WINDOW_STYLESHEET)
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
+configure_file("rml/resources.cpp.in" "${CMAKE_CURRENT_BINARY_DIR}/generated/resources.cpp" @ONLY)
+target_sources("leaf-application" PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated/resources.cpp")
 
 target_include_directories("leaf-application" PUBLIC
     "${PROJECT_SOURCE_DIR}/include"

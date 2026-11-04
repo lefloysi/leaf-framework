@@ -1,4 +1,5 @@
 #include "application/rml/file_interface.hpp"
+#include "application/rml/resources.hpp"
 
 #include "leaf/core/filesystem.hpp"
 #include "leaf/core/format.hpp"
@@ -14,6 +15,10 @@ namespace lf {
 		if (!location) {
 			log::Warning("[rml] invalid resource '{}': {}", path, location.error().message);
 			return 0;
+		}
+		if (location->text() == "/leaf/application/window.rcss") {
+			const auto* first = reinterpret_cast<const u08*>(rml_resources::window_stylesheet);
+			return reinterpret_cast<Rml::FileHandle>(new File{ vector<u08>(first, first + std::strlen(rml_resources::window_stylesheet)) });
 		}
 
 		report<vector<u08>> bytes = fs::read_all(*location);

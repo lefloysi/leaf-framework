@@ -1,0 +1,5 @@
+#include "application/rml/resources.hpp"
+
+namespace lf::rml_resources {
+	const char window_stylesheet[] = R"LEAF_RCSS(@LEAF_WINDOW_STYLESHEET@)LEAF_RCSS";
+} // namespace lf::rml_resources
