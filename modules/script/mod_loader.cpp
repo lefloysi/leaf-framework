@@ -712,11 +712,17 @@ namespace lf {
 		default: return false;
 		}
 	}
+	bool mod_dependency_matches(const ModDependency& dependency, version actual) {
+		return version_compare(actual, dependency.required_version, dependency.op);
+	}
+
 	error sort_mods_by_dependency(vector<ModInfo>& mods) {
 		log::Debug("{}", lf::format("[mod-loader] dependency resolution begin: {} enabled mod(s)", mods.size()));
 		auto mod_index = unordered_map_string<usize>();
 		for (usize i = 0; i < mods.size(); ++i) {
-			mod_index[mods[i].name] = i;
+			if (!mod_index.emplace(mods[i].name, i).second) {
+				return error{ generic_errc::conflict, lf::format("duplicate mod '{}'", mods[i].name) };
+			}
 			log::Debug("{}", lf::format("[mod-loader] dependency input: {} v{} deps=[{}]", mods[i].name, version_to_string(mods[i].mod_version), dependencies_to_string(mods[i].dependencies)));
 		}
 
@@ -728,7 +734,7 @@ namespace lf {
 				if (dep.type == ModDependency::Type::Forbidden) {
 					if (it != mod_index.end()) {
 						// Check forbidden version constraint
-						if (version_compare(mods[it->second].mod_version, dep.required_version, dep.op)) {
+						if (mod_dependency_matches(dep, mods[it->second].mod_version)) {
 							string msg =
 								"Mod '" + mods[i].name + "' forbids mod '" + dep.name +
 								"' (version " + version_to_string(mods[it->second].mod_version) +
@@ -743,7 +749,7 @@ namespace lf {
 					dep.type == ModDependency::Type::Optional) {
 					if (it != mod_index.end()) {
 						// Check required/optional version constraint
-						if (!version_compare(mods[it->second].mod_version, dep.required_version, dep.op)) {
+						if (!mod_dependency_matches(dep, mods[it->second].mod_version)) {
 							string msg = "Mod '" + mods[i].name + "' requires mod '" + dep.name +
 										 " " + operator_to_string(dep.op) + " version " +
 										 version_to_string(dep.required_version) + "' but '" +
@@ -909,6 +915,99 @@ namespace lf {
 		mappings.clear();
 		mods.clear();
 	}
+	report<vector<ModInfo>> resolve_mod_dependencies(span<const ModInfo> available, string_view root) {
+		const auto* requested = find_mod(available, root);
+		if (!requested) {
+			return unexpected(error{ generic_errc::invalid_id, lf::format("unknown mod '{}'", root) });
+		}
+		vector<ModInfo> selected{ *requested };
+		for (usize index = 0; index < selected.size(); ++index) {
+			const auto dependencies = selected[index].dependencies;
+			for (const auto& dependency : dependencies) {
+				const auto* found = find_mod(available, dependency.name);
+				if (dependency.type == ModDependency::Type::Forbidden) {
+					if (found && mod_dependency_matches(dependency, found->mod_version)) {
+						return unexpected(error{ generic_errc::conflict, lf::format("mod '{}' forbids enabled mod '{}'", selected[index].name, dependency.name) });
+					}
+					continue;
+				}
+				if (found && !find_mod(selected, dependency.name)) {
+					selected.push_back(*found);
+				}
+			}
+		}
+		if (auto result = sort_mods_by_dependency(selected)) {
+			return unexpected(result);
+		}
+		return selected;
+	}
+
+	Mod::Discovery Mod::discover(span<const Source> sources, const MetadataFallback& fallback) {
+		Discovery result;
+		const auto inspect = [&](const Source& source, const fs::path& directory_path) {
+			auto directory = fs::open_volume(directory_path);
+			if (!directory) {
+				result.errors.push_back(directory.error());
+				return;
+			}
+			if (source.privileged && directory->access() != fs::access_mode::read_only) {
+				result.errors.emplace_back(generic_errc::invalid_state, lf::format("privileged mod source '{}' must be read-only", directory_path.text()));
+				return;
+			}
+			const auto info_path = directory_path.append("info.yaml");
+			const auto info_status = fs::status(info_path);
+			std::optional<ModInfo> info;
+			if (info_status) {
+				auto parsed = parse_mod_info(info_path.text(), source.privileged);
+				if (!parsed) {
+					result.errors.push_back(parsed.error().add_context(lf::format("reading '{}'", info_path.text())));
+					return;
+				}
+				info = std::move(*parsed);
+			}
+			else if (info_status.error().code != lf::make_error_code(fs::error_code::not_found)) {
+				result.errors.push_back(info_status.error());
+				return;
+			}
+			else if (fallback) {
+				auto parsed = fallback(directory_path, source.privileged);
+				if (!parsed) {
+					result.errors.push_back(parsed.error());
+					return;
+				}
+				info = std::move(*parsed);
+			}
+			if (!info) {
+				return;
+			}
+			if (find_mod(result.mods, info->name)) {
+				result.errors.emplace_back(generic_errc::conflict, lf::format("duplicate mod '{}'", info->name));
+				return;
+			}
+			info->location = directory_path;
+			info->privileged = source.privileged;
+			result.mods.push_back(std::move(*info));
+		};
+		for (const auto& source : sources) {
+			if (source.kind == Source::Kind::mod_directory) {
+				inspect(source, source.path);
+				continue;
+			}
+			auto entries = fs::list(source.path);
+			if (!entries) {
+				result.errors.push_back(entries.error().add_context(lf::format("discovering mods in '{}'", source.path.text())));
+				continue;
+			}
+			std::sort(entries->begin(), entries->end(), [](const auto& left, const auto& right) { return left.name() < right.name(); });
+			for (const auto& entry : *entries) {
+				if (entry.status().type() == fs::node_type::directory) {
+					inspect(source, source.path.append(entry.name()));
+				}
+			}
+		}
+		return result;
+	}
+
 	error load_sources(span<const Mod::Source> sources, vector<ModInfo>& loaded_mods, vector<fs::mapping>& mod_mappings, texture_atlas& atlas, Progress progress) {
 		#define RETURN_IF_CANCELLED if (progress.cancelled()) { return error(generic_errc::cancelled, "startup cancelled"); }
 
@@ -928,42 +1027,11 @@ namespace lf {
 		phase.add_total(3);
 		RETURN_IF_CANCELLED
 
-		vector<ModInfo> mods;
-		for (const Mod::Source& source : sources) {
-			RETURN_IF_CANCELLED
-			report<vector<fs::directory_entry>> entries = fs::list(source.path);
-			if (!entries) {
-				return entries.error().add_context(lf::format("discovering mods in '{}'", source.path.text()));
-			}
-			for (const fs::directory_entry& entry : *entries) {
-				if (entry.status().type() != fs::node_type::directory) {
-					continue;
-				}
-				RETURN_IF_CANCELLED
-				const auto mod_dir = source.path.append(entry.name());
-				auto directory = fs::open_volume(mod_dir);
-				if (!directory) { return directory.error(); }
-				if (source.privileged && directory->access() != fs::access_mode::read_only) {
-					return error{ generic_errc::invalid_state, lf::format("privileged mod source '{}' must be read-only", mod_dir.text()) };
-				}
-				const auto info_path = mod_dir.append("info.yaml");
-				const auto info_status = fs::status(info_path);
-				if (!info_status) {
-					if (info_status.error().code == lf::make_error_code(fs::error_code::not_found)) {
-						continue;
-					}
-					return info_status.error();
-				}
-				auto parsed = parse_mod_info(info_path.text(), source.privileged);
-				if (!parsed) { return parsed.error().add_context(lf::format("reading '{}'", info_path.text())); }
-				ModInfo info(std::move(*parsed));
-				if (find_mod(mods, info.name)) {
-					return error{ generic_errc::conflict, lf::format("duplicate mod '{}'", info.name) };
-				}
-				log::Debug("[mod-loader] discovered {} v{} at {}", info.name, version_to_string(info.mod_version), info.location.text());
-				mods.emplace_back(std::move(info));
-			}
+		auto discovered = Mod::discover(sources);
+		if (!discovered.errors.empty()) {
+			return discovered.errors.front();
 		}
+		auto mods = std::move(discovered.mods);
 		RETURN_IF_CANCELLED
 		log::Info("{}", lf::format("[mod-loader] discovered {} mod(s): {}", mods.size(), mod_names_to_string(mods)));
 
@@ -971,7 +1039,7 @@ namespace lf {
 		RETURN_IF_CANCELLED
 		fs::path enabled_mods_path("/enabled_mods.yaml");
 		if (const auto error = sync_enabled_mods(enabled_mods_path, mods)) { return error; }
-		std::unordered_map<string, ModEnabledInfo> enabled_mods = load_enabled_mods(enabled_mods_path);
+		unordered_map<string, ModEnabledInfo> enabled_mods = load_enabled_mods(enabled_mods_path);
 		log::Debug("{}", lf::format("[mod-loader] enabled mods file={} entries={}", enabled_mods_path.text(), enabled_mods.size()));
 		if (const auto status = fs::status(enabled_mods_path); !status) { return status.error(); }
 		if (const auto created = fs::create_directories("/settings"); !created) { return created.error(); }

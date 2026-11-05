@@ -9,6 +9,9 @@ namespace lf {
 	template<typename kT, typename vT, typename Hasher = std::hash<kT>, typename KeyEqual = std::equal_to<kT>>
 	class unordered_map : public std::unordered_map<kT, vT, Hasher, KeyEqual> {
 	  public:
+		using std::unordered_map<kT, vT, Hasher, KeyEqual>::unordered_map;
+		using std::unordered_map<kT, vT, Hasher, KeyEqual>::operator=;
+
 		vT& at(const kT& key) {
 			auto it = this->find(key);
 			if (it == this->end()) {

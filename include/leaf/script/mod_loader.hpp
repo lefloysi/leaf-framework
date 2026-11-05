@@ -8,14 +8,28 @@
 #include <mutex>
 #include <future>
 #include <thread>
+#include <functional>
+#include <optional>
 
 namespace lf {
 	struct Mod : Singleton<Mod> {
 	  public:
 		struct Source {
+			enum class Kind {
+				root,
+				mod_directory,
+			};
 			fs::path path;
 			bool privileged = false;
+			Kind kind = Kind::root;
 		};
+		struct Discovery {
+			vector<ModInfo> mods;
+			vector<error> errors;
+		};
+		using MetadataFallback = std::function<report<std::optional<ModInfo>>(const fs::path&, bool)>;
+
+		static Discovery discover(span<const Source> sources, const MetadataFallback& fallback = {});
 
 		// async operation
 		static void load(span<const Source> sources);

@@ -56,4 +56,7 @@ namespace lf {
 	** @param priviledged Whether the mod is loaded from a privileged root.
 	*/
 	report<ModInfo> parse_mod_info(string_view path, bool priviledged);
+	bool mod_dependency_matches(const ModDependency& dependency, version actual);
+	error sort_mods_by_dependency(vector<ModInfo>& mods);
+	report<vector<ModInfo>> resolve_mod_dependencies(span<const ModInfo> available, string_view root);
 } // namespace lf

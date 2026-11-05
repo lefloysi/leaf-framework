@@ -54,6 +54,9 @@ namespace lf {
 		field_presence assign_schema(const conditional_node<Controller, Condition, Children...>& conditional) const;
 
 	  public:
+		using dict_underlying::dict_underlying;
+		using dict_underlying::operator=;
+
 		template<schema_node... Fields>
 		void assign(Fields&&... fields) const;
 
@@ -62,6 +65,9 @@ namespace lf {
 	};
 	class list : public list_underlying {
 	  public:
+		using list_underlying::list_underlying;
+		using list_underlying::operator=;
+
 		template<typename T>
 		T parse_index(size_t index) const;
 	};
@@ -438,6 +444,9 @@ namespace lf {
 	template<typename T>
 	struct object_trait<vector<T>> {
 		static vector<T> parse(const object& obj) {
+			if (obj.is<dict>() && obj.get<dict>().empty()) {
+				return {};
+			}
 			const list& values = object_trait<list>::parse(obj);
 			vector<T> result;
 			result.reserve(values.size());

@@ -4,8 +4,8 @@
 #include <yaml-cpp/yaml.h>
 
 namespace lf {
-	std::unordered_map<string, ModEnabledInfo> load_enabled_mods(const fs::path& yaml_path) {
-		std::unordered_map<string, ModEnabledInfo> result;
+	unordered_map<string, ModEnabledInfo> load_enabled_mods(const fs::path& yaml_path) {
+		unordered_map<string, ModEnabledInfo> result;
 		report<vector<u08>> bytes = fs::read_all(yaml_path);
 		if (!bytes) {
 			if (bytes.error().code == make_error_code(fs::error_code::not_found)) { return result; }
@@ -24,7 +24,7 @@ namespace lf {
 		return result;
 	}
 
-	error save_enabled_mods(const fs::path& yaml_path, const std::unordered_map<string, ModEnabledInfo>& mods) {
+	error save_enabled_mods(const fs::path& yaml_path, const unordered_map<string, ModEnabledInfo>& mods) {
 		YAML::Emitter emitter;
 		emitter << YAML::BeginMap;
 		emitter << "mods" << YAML::BeginMap;
@@ -51,7 +51,7 @@ namespace lf {
 		if (report<void> created = fs::create_directories(yaml_path.parent()); !created) {
 			return created.error();
 		}
-		if (report<void> result = fs::write_all(yaml_path, span<const u08>(bytes, output.size())); !result) {
+		if (report<void> result = fs::write_all_atomic(yaml_path, span<const u08>(bytes, output.size())); !result) {
 			return result.error();
 		}
 		return {};
@@ -60,7 +60,7 @@ namespace lf {
 	error sync_enabled_mods(const fs::path& yaml_path, const vector<ModInfo>& discovered_mods) {
 		auto enabled_mods = load_enabled_mods(yaml_path);
 		// Add new mods as disabled, update versions, remove missing mods
-		std::unordered_map<string, ModEnabledInfo> updated;
+		unordered_map<string, ModEnabledInfo> updated;
 		for (const auto& mod : discovered_mods) {
 			auto it = enabled_mods.find(mod.name);
 			if (it != enabled_mods.end()) {

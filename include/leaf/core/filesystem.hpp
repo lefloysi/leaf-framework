@@ -105,6 +105,9 @@ namespace lf::fs {
 		file_and_directory
 	};
 
+	/*! @brief Atomically replaces a native destination on the same filesystem without requiring a virtual mount. Source remains intact if replacement fails; a subsequent directory synchronization failure can occur after replacement. */
+	report<void> replace_native_file(const native_path& source, const native_path& destination, durability persistence = durability::none);
+
 	class path;
 	class stream;
 	class file;

@@ -941,30 +941,10 @@ namespace lf::fs {
 						return unexpected(error(error_code::io_error, "unable to write atomic staging file"));
 					}
 				}
-				if (atomic_options.persistence() != durability::none) {
-					report<void> synced = sync_native_file(temporary);
-					if (!synced) {
-						std::filesystem::remove(temporary, system_error);
-						return unexpected(synced.error());
-					}
-				}
-#if defined(_WIN32)
-				if (!MoveFileExW(temporary.c_str(), resolved->c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+				report<void> replaced = replace_native_file(temporary, *resolved, atomic_options.persistence());
+				if (!replaced) {
 					std::filesystem::remove(temporary, system_error);
-					return unexpected(error(error_code::io_error, "atomic native replacement failed"));
-				}
-#else
-				std::filesystem::rename(temporary, *resolved, system_error);
-				if (system_error) {
-					std::filesystem::remove(temporary, system_error);
-					return unexpected(error(error_code::io_error, "atomic native replacement failed"));
-				}
-#endif
-				if (atomic_options.persistence() == durability::file_and_directory) {
-					report<void> synced = sync_native_directory(resolved->parent_path());
-					if (!synced) {
-						return unexpected(synced.error());
-					}
+					return unexpected(replaced.error());
 				}
 				return {};
 			}
@@ -1071,6 +1051,31 @@ namespace lf::fs {
 			return parent_backend->write_all_atomic(*full, bytes, options);
 		}
 	} // namespace detail
+
+	report<void> replace_native_file(const native_path& source, const native_path& destination, durability persistence) {
+		if (persistence != durability::none) {
+			report<void> synced = detail::sync_native_file(source);
+			if (!synced) {
+				return unexpected(synced.error());
+			}
+		}
+#if defined(_WIN32)
+		if (!MoveFileExW(source.c_str(), destination.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+			return unexpected(error(error_code::io_error, "atomic native replacement failed"));
+		}
+#else
+		std::error_code system_error;
+		std::filesystem::rename(source, destination, system_error);
+		if (system_error) {
+			return unexpected(error(error_code::io_error, "atomic native replacement failed"));
+		}
+#endif
+		if (persistence == durability::file_and_directory) {
+			const native_path parent = destination.has_parent_path() ? destination.parent_path() : native_path(".");
+			return detail::sync_native_directory(parent);
+		}
+		return {};
+	}
 
 	file borrow(span<const u08> bytes) {
 		return file(detail::borrowed_file(bytes.data(), nullptr, bytes.size()));

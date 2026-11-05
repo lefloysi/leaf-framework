@@ -27,16 +27,14 @@ namespace lf {
 		}
 
 		PrototypeBase(const dict& data) {
-			string name;
-			data.assign(
-				field("name", name),
-				field("local_name", local_name, name),
-				field(data.contains("local_desc") ? "local_desc" : "local_description", local_description, local_name),
-				field("order", order, "1")
-			);
+			data.assign(field("name", name));
+			data.assign(field("local_name", local_name, name));
+			data.assign(field(data.contains("local_desc") ? "local_desc" : "local_description", local_description, local_name));
+			data.assign(field("order", order, "1"));
 		}
 		virtual ~PrototypeBase() = default;
 
+		string name;
 		string order = "1";
 		local_string local_name;
 		local_string local_description;
@@ -46,6 +44,7 @@ namespace lf {
 	struct schema_trait<PrototypeBase> {
 		static auto get(auto& value) {
 			return group(
+				field("name", value.name, value.name),
 				field("order", value.order, value.order),
 				field("local_name", value.local_name.key, value.local_name.key),
 				field("local_desc", value.local_description.key, value.local_description.key)

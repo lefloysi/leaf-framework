@@ -3,7 +3,7 @@
 #include "leaf/core/string.hpp"
 #include "leaf/core/version.hpp"
 #include "leaf/script/mod_info.hpp"
-#include <unordered_map>
+#include "leaf/core/unordered_map.hpp"
 
 namespace lf {
 	struct ModEnabledInfo {
@@ -12,9 +12,9 @@ namespace lf {
 	};
 
 	// Loads enabled mods from YAML file
-	std::unordered_map<string, ModEnabledInfo> load_enabled_mods(const fs::path& yaml_path);
+	unordered_map<string, ModEnabledInfo> load_enabled_mods(const fs::path& yaml_path);
 	// Saves enabled mods to YAML file
-	error save_enabled_mods(const fs::path& yaml_path, const std::unordered_map<string, ModEnabledInfo>& mods);
+	error save_enabled_mods(const fs::path& yaml_path, const unordered_map<string, ModEnabledInfo>& mods);
 	// Synchronizes enabled mods file with discovered mods
 	error sync_enabled_mods(const fs::path& yaml_path, const vector<ModInfo>& discovered_mods);
 	// Set mod enabled/disabled
