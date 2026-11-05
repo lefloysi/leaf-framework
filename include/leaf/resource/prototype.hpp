@@ -31,7 +31,7 @@ namespace lf {
 			data.assign(
 				field("name", name),
 				field("local_name", local_name, name),
-				field("local_description", local_description, local_name),
+				field(data.contains("local_desc") ? "local_desc" : "local_description", local_description, local_name),
 				field("order", order, "1")
 			);
 		}
@@ -48,7 +48,7 @@ namespace lf {
 			return group(
 				field("order", value.order, value.order),
 				field("local_name", value.local_name.key, value.local_name.key),
-				field("local_description", value.local_description.key, value.local_description.key)
+				field("local_desc", value.local_description.key, value.local_description.key)
 			);
 		}
 	};
