@@ -59,8 +59,8 @@ namespace lf {
 
 	error sync_enabled_mods(const fs::path& yaml_path, const vector<ModInfo>& discovered_mods) {
 		auto enabled_mods = load_enabled_mods(yaml_path);
-		// Add new mods as disabled, update versions, remove missing mods
-		unordered_map<string, ModEnabledInfo> updated;
+		// Preserve preferences for temporarily absent mods while synchronizing discovered versions.
+		auto updated = enabled_mods;
 		for (const auto& mod : discovered_mods) {
 			auto it = enabled_mods.find(mod.name);
 			if (it != enabled_mods.end()) {

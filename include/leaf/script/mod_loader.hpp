@@ -31,8 +31,14 @@ namespace lf {
 
 		static Discovery discover(span<const Source> sources, const MetadataFallback& fallback = {});
 
+		struct LoadOptions {
+			fs::path enabled_mods_path{ "/enabled_mods.yaml" };
+			bool use_enabled_preferences = true;
+		};
+
 		// async operation
 		static void load(span<const Source> sources);
+		static void load(span<const Source> sources, LoadOptions options);
 		static void unload();
 		static const Progress& progress();
 		static std::future<error> result();

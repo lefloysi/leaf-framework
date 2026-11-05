@@ -406,6 +406,9 @@ namespace lf {
 		}
 	}
 	string dependency_to_string(const ModDependency& dependency) {
+		if (dependency.op == ModDependency::Operator::Any) {
+			return lf::format("{} {}", dependency_type_name(dependency.type), dependency.name);
+		}
 		return lf::format("{} {} {} {}", dependency_type_name(dependency.type), dependency.name, operator_to_string(dependency.op), version_to_string(dependency.required_version));
 	}
 	string dependencies_to_string(const vector<ModDependency>& dependencies) {
@@ -1008,7 +1011,7 @@ namespace lf {
 		return result;
 	}
 
-	error load_sources(span<const Mod::Source> sources, vector<ModInfo>& loaded_mods, vector<fs::mapping>& mod_mappings, texture_atlas& atlas, Progress progress) {
+	error load_sources(span<const Mod::Source> sources, vector<ModInfo>& loaded_mods, vector<fs::mapping>& mod_mappings, texture_atlas& atlas, Progress progress, const Mod::LoadOptions& options_config) {
 		#define RETURN_IF_CANCELLED if (progress.cancelled()) { return error(generic_errc::cancelled, "startup cancelled"); }
 
 		log::Info("{}", "[mod-loader] loading mods");
@@ -1037,11 +1040,20 @@ namespace lf {
 
 		phase.advance();
 		RETURN_IF_CANCELLED
-		fs::path enabled_mods_path("/enabled_mods.yaml");
-		if (const auto error = sync_enabled_mods(enabled_mods_path, mods)) { return error; }
-		unordered_map<string, ModEnabledInfo> enabled_mods = load_enabled_mods(enabled_mods_path);
+		const fs::path& enabled_mods_path = options_config.enabled_mods_path;
+		unordered_map<string, ModEnabledInfo> enabled_mods;
+		if (options_config.use_enabled_preferences) {
+			if (const auto error = sync_enabled_mods(enabled_mods_path, mods)) {
+				return error;
+			}
+			enabled_mods = load_enabled_mods(enabled_mods_path);
+		}
 		log::Debug("{}", lf::format("[mod-loader] enabled mods file={} entries={}", enabled_mods_path.text(), enabled_mods.size()));
-		if (const auto status = fs::status(enabled_mods_path); !status) { return status.error(); }
+		if (options_config.use_enabled_preferences) {
+			if (const auto status = fs::status(enabled_mods_path); !status) {
+				return status.error();
+			}
+		}
 		if (const auto created = fs::create_directories("/settings"); !created) { return created.error(); }
 		for (ModInfo& mod : mods) {
 			auto directory = fs::open_volume(mod.location);
@@ -1063,7 +1075,9 @@ namespace lf {
 		vector<ModInfo> enabled_mod_list;
 		for (const ModInfo& mod : mods) {
 			const auto it = enabled_mods.find(mod.name);
-			if (it == enabled_mods.end() || !it->second.enabled) { continue; }
+			if (options_config.use_enabled_preferences && (it == enabled_mods.end() || !it->second.enabled)) {
+				continue;
+			}
 			enabled_mod_list.emplace_back(mod);
 		}
 		log::Info("{}", lf::format("[mod-loader] enabled {} mod(s): {}", enabled_mod_list.size(), mod_names_to_string(enabled_mod_list)));
@@ -1155,6 +1169,10 @@ namespace lf {
 	}
 
 	void Mod::load(span<const Source> sources) {
+		load(sources, LoadOptions{});
+	}
+
+	void Mod::load(span<const Source> sources, LoadOptions options) {
 		auto& self = instance();
 		auto lock = std::scoped_lock(self.operation_mutex);
 		self.loading_worker.request_stop();
@@ -1165,7 +1183,7 @@ namespace lf {
 
 		auto promise = std::promise<error>();
 		self.loading_result = promise.get_future();
-		self.loading_worker = std::jthread([&self, sources = std::move(owned_sources), progress = self.loading_progress(), promise = std::move(promise)](std::stop_token stop) mutable {
+		self.loading_worker = std::jthread([&self, sources = std::move(owned_sources), options = std::move(options), progress = self.loading_progress(), promise = std::move(promise)](std::stop_token stop) mutable {
 			progress.stop = stop;
 			auto status = error();
 			try {
@@ -1173,7 +1191,7 @@ namespace lf {
 				// callbacks only finalize the loaded databases.
 				progress.add("Loading content", 99);
 				progress.add("Initializing loaded content");
-				status = load_sources(sources, self.loaded_mods, self.mod_mappings, loaded_texture_atlas(), progress());
+				status = load_sources(sources, self.loaded_mods, self.mod_mappings, loaded_texture_atlas(), progress(), options);
 				if (!status && stop.stop_requested()) { status = error(generic_errc::cancelled, "Mod loading cancelled"); }
 				if (!status) {
 					Progress initialization = progress();

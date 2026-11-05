@@ -439,6 +439,8 @@ namespace lf::fs {
 	file borrow(span<u08> bytes);
 	/*! @brief Opens one native file as a type-erased file source. */
 	report<file> native_file(native_path source, open_options options = open_options());
+	/*! @brief Rejects existing symbolic links and platform reparse points, optionally checking every ancestor. Missing nodes are allowed. */
+	report<void> reject_native_links(const native_path& source, bool include_ancestors = true);
 	/*! @brief Opens one native directory tree as a mountable volume. */
 	report<volume> native_volume(native_path source, native_volume_options options = native_volume_options());
 	/*! @brief Mounts an exact file path and returns its lifetime token. */

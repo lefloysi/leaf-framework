@@ -714,11 +714,9 @@ namespace lf::fs {
 						const usize end = text.find('/', begin);
 						const string_view name = text.substr(begin, end == string_view::npos ? text.size() - begin : end - begin);
 						segment /= native_path(name);
-						const std::filesystem::file_status state = std::filesystem::symlink_status(segment, system_error);
-						if (!system_error && std::filesystem::is_symlink(state)) {
-							return unexpected(error(error_code::permission_denied, "native volume symlink is rejected"));
+						if (const auto checked = reject_native_links(segment, false); !checked) {
+							return unexpected(checked.error());
 						}
-						system_error.clear();
 						if (end == string_view::npos) {
 							break;
 						}
@@ -1112,6 +1110,44 @@ namespace lf::fs {
 		return file(detail::native_file(std::move(source), access));
 	}
 
+	report<void> reject_native_links(const native_path& source, bool include_ancestors) {
+		std::error_code system_error;
+		auto current = std::filesystem::absolute(source, system_error).lexically_normal();
+		if (system_error) {
+			return unexpected(error{ system_error, "resolving native path for link validation" });
+		}
+		while (!current.empty()) {
+			const auto state = std::filesystem::symlink_status(current, system_error);
+			if (system_error && system_error != std::errc::no_such_file_or_directory && system_error != std::errc::not_a_directory) {
+				return unexpected(error{ system_error, "inspecting native path: " + current.string() });
+			}
+			if (!system_error && std::filesystem::is_symlink(state)) {
+				return unexpected(error{ error_code::permission_denied, "native symbolic link is rejected: " + current.string() });
+			}
+#if defined(_WIN32)
+			if (!system_error && std::filesystem::exists(state)) {
+				const auto attributes = GetFileAttributesW(current.c_str());
+				if (attributes == INVALID_FILE_ATTRIBUTES) {
+					return unexpected(error{ error_code::io_error, "cannot inspect native path: " + current.string() });
+				}
+				if ((attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
+					return unexpected(error{ error_code::permission_denied, "native reparse point is rejected: " + current.string() });
+				}
+			}
+#endif
+			if (!include_ancestors) {
+				break;
+			}
+			const auto parent = current.parent_path();
+			if (parent == current) {
+				break;
+			}
+			current = parent;
+			system_error.clear();
+		}
+		return {};
+	}
+
 	report<volume> native_volume(native_path source, native_volume_options options) {
 		std::error_code system_error;
 		if (!std::filesystem::exists(source, system_error)) {
@@ -1126,8 +1162,10 @@ namespace lf::fs {
 		if (!std::filesystem::is_directory(source, system_error)) {
 			return unexpected(error(error_code::not_a_directory, "native volume root is not a directory"));
 		}
-		if (options.symlinks() == symlink_policy::reject && std::filesystem::is_symlink(std::filesystem::symlink_status(source, system_error))) {
-			return unexpected(error(error_code::permission_denied, "native volume root is a symlink"));
+		if (options.symlinks() == symlink_policy::reject) {
+			if (const auto checked = reject_native_links(source, false); !checked) {
+				return unexpected(checked.error());
+			}
 		}
 		const native_path root = std::filesystem::weakly_canonical(source, system_error);
 		if (system_error) {

@@ -57,6 +57,10 @@ namespace lf {
 	*/
 	report<ModInfo> parse_mod_info(string_view path, bool priviledged);
 	bool mod_dependency_matches(const ModDependency& dependency, version actual);
+	/*! @brief Formats all version components, including a nonzero snapshot suffix. */
+	string version_to_string(const version& value);
+	/*! @brief Formats dependency kind, mod identity, and any version constraint. */
+	string dependency_to_string(const ModDependency& dependency);
 	error sort_mods_by_dependency(vector<ModInfo>& mods);
 	report<vector<ModInfo>> resolve_mod_dependencies(span<const ModInfo> available, string_view root);
 } // namespace lf
