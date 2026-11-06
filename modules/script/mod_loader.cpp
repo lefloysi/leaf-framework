@@ -1051,15 +1051,19 @@ namespace lf {
 		const fs::path& enabled_mods_path = options_config.enabled_mods_path;
 		unordered_map<string, ModEnabledInfo> enabled_mods;
 		if (options_config.use_enabled_preferences) {
-			if (const auto error = sync_enabled_mods(enabled_mods_path, mods)) {
-				return error;
+			if (options_config.preferences_access == Mod::enabled_preferences_access::synchronize) {
+				if (const auto error = sync_enabled_mods(enabled_mods_path, mods)) {
+					return error;
+				}
 			}
 			enabled_mods = load_enabled_mods(enabled_mods_path);
 		}
 		log::Debug("{}", lf::format("[mod-loader] enabled mods file={} entries={}", enabled_mods_path.text(), enabled_mods.size()));
 		if (options_config.use_enabled_preferences) {
 			if (const auto status = fs::status(enabled_mods_path); !status) {
-				return status.error();
+				if (options_config.preferences_access != Mod::enabled_preferences_access::read_only || status.error().code != lf::make_error_code(fs::error_code::not_found)) {
+					return status.error();
+				}
 			}
 		}
 		if (const auto created = fs::create_directories("/settings"); !created) { return created.error(); }
@@ -1083,7 +1087,7 @@ namespace lf {
 		vector<ModInfo> enabled_mod_list;
 		for (const ModInfo& mod : mods) {
 			const auto it = enabled_mods.find(mod.name);
-			if (options_config.use_enabled_preferences && (it == enabled_mods.end() || !it->second.enabled)) {
+			if (options_config.use_enabled_preferences && (it == enabled_mods.end() ? !mod.privileged : !it->second.enabled)) {
 				continue;
 			}
 			enabled_mod_list.emplace_back(mod);

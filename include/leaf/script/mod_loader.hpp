@@ -31,9 +31,14 @@ namespace lf {
 
 		static Discovery discover(span<const Source> sources, const MetadataFallback& fallback = {});
 
+		enum class enabled_preferences_access {
+			read_only,
+			synchronize,
+		};
 		struct LoadOptions {
 			fs::path enabled_mods_path{ "/enabled_mods.yaml" };
 			bool use_enabled_preferences = true;
+			enabled_preferences_access preferences_access = enabled_preferences_access::synchronize;
 		};
 
 		// async operation
