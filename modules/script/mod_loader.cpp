@@ -844,6 +844,14 @@ namespace lf {
 			return error(generic_errc::type_mismatch, "data.raw must be a table/dict");
 		}
 		dict& data_raw = data_raw_obj.get<dict>();
+		for (const auto& [type, prototypes] : data_raw) {
+			const auto known = std::find_if(PrototypeTypeRegistry::functions.begin(), PrototypeTypeRegistry::functions.end(), [&](const auto& registered) {
+				return registered.type() == type;
+			});
+			if (known == PrototypeTypeRegistry::functions.end()) {
+				return error{ generic_errc::invalid_id, lf::format("unregistered prototype type '{}' in data.raw", type) };
+			}
+		}
 
 		for (auto& fn : lf::PrototypeTypeRegistry::functions) {
 			auto it = data_raw.find(fn.type());
