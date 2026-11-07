@@ -1,5 +1,9 @@
 #include "application/rml/backend.hpp"
+#ifdef LEAF_APPLICATION_EMBEDDED_FONT_HEADER
+#include LEAF_APPLICATION_EMBEDDED_FONT_HEADER
+#else
 #include "application/embed/font.h"
+#endif
 #include "leaf/core/logging.hpp"
 #include "leaf/core/register.hpp"
 
