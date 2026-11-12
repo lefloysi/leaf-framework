@@ -36,6 +36,7 @@
 namespace lf {
 	namespace {
 		std::atomic<u64> input_settings_revision = std::atomic<u64>(0);
+		std::atomic<u64> mod_revision = std::atomic<u64>(0);
 	}
 
 	u64 InputSettingsRevision() { return input_settings_revision.load(); }
@@ -1189,6 +1190,7 @@ namespace lf {
 		auto lock = std::scoped_lock(self.operation_mutex);
 		self.loading_worker.request_stop();
 		if (self.loading_worker.joinable()) { self.loading_worker.join(); }
+		++mod_revision;
 		auto owned_sources = vector<Source>(sources.begin(), sources.end());
 		self.loading_progress = Progress("Loading mods");
 		self.loading_progress.add("Loading mods");
@@ -1239,7 +1241,12 @@ namespace lf {
 		auto lock = std::scoped_lock(self.operation_mutex);
 		self.loading_worker.request_stop();
 		if (self.loading_worker.joinable()) { self.loading_worker.join(); }
+		++mod_revision;
 		clear(self.loaded_mods, self.mod_mappings, loaded_texture_atlas());
+	}
+
+	u64 Mod::revision() {
+		return mod_revision.load();
 	}
 
 	span<ModInfo> Mod::loaded() { return instance().loaded_mods; }

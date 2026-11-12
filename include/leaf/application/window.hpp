@@ -276,6 +276,8 @@ namespace lf {
 		rt::view<rt::framebuffer> current_framebuffer();
 		rt::view<const rt::framebuffer> current_framebuffer() const;
 		void submit(rt::view<rt::command_buffer> commands);
+		// Pace before collecting input; begin_frame consumes this preparation once.
+		void prepare_frame();
 		rt::view<rt::command_buffer> begin_frame();
 		void begin_rendering();
 		rt::timepoint end_frame();
@@ -304,6 +306,7 @@ namespace lf {
 		rt::view<rt::framebuffer> frame_buffer;
 		timespan frame_interval{};
 		timespan next_frame_at{};
+		bool frame_prepared = false;
 		std::mutex frame_mutex;
 		std::condition_variable resize_event;
 

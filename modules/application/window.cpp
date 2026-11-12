@@ -199,13 +199,29 @@ namespace lf {
 	void Window::set_frame_rate(frequency limit) {
 		frame_interval = limit.in_hertz().quantum_count().raw() > 0 ? limit.period() : timespan();
 		next_frame_at = timespan();
+		frame_prepared = false;
+	}
+
+	void Window::prepare_frame() {
+		if (!drawable()) {
+			frame_prepared = false;
+			return;
+		}
+		wait_for_frame();
+		frame_prepared = true;
 	}
 
 	rt::view<rt::command_buffer> Window::begin_frame() {
 		LF_PROFILE_SCOPE("frame.acquire-and-reset");
 		discard_frame();
-		if (!drawable()) { return {}; }
-		wait_for_frame();
+		if (!drawable()) {
+			frame_prepared = false;
+			return {};
+		}
+		if (!frame_prepared) {
+			wait_for_frame();
+		}
+		frame_prepared = false;
 		const auto actual_framebuffer_extent = platform_framebuffer_extent(platform);
 
 		if (framebuffer_extent.width != actual_framebuffer_extent.width || framebuffer_extent.height != actual_framebuffer_extent.height) {

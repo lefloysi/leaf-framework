@@ -45,6 +45,7 @@ namespace lf {
 		static void load(span<const Source> sources);
 		static void load(span<const Source> sources, LoadOptions options);
 		static void unload();
+		static u64 revision();
 		static const Progress& progress();
 		static std::future<error> result();
 		static void cancel();

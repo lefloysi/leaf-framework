@@ -4,6 +4,7 @@
 #include "leaf/core/filesystem.hpp"
 #include "leaf/core/logging.hpp"
 #include "leaf/resource/database.hpp"
+#include "leaf/script/mod_loader.hpp"
 
 #include <miniaudio.h>
 
@@ -21,6 +22,7 @@ namespace lf {
 
 	struct Audio::State {
 		struct Voice {
+			string path;
 			vector<u08> bytes;
 			ma_decoder decoder{};
 			ma_sound sound{};
@@ -56,6 +58,7 @@ namespace lf {
 		ma_engine engine{};
 		f32 volume = 1.0f;
 		std::vector<std::unique_ptr<Voice>> voices;
+		u64 mod_revision = 0;
 
 		bool open() {
 			if (status != device_status::unopened) {
@@ -90,10 +93,25 @@ namespace lf {
 	}
 
 	bool Audio::play(SoundPrototype::ID sound, f32 volume) {
+		const auto revision = Mod::revision();
+		if (state->mod_revision != revision) {
+			state->voices.clear();
+			state->mod_revision = revision;
+		}
 		const auto& prototype = Database<SoundPrototype>::get(sound);
 		f32 gain = audio_volume(volume) * audio_volume(prototype.volume);
 		if (prototype.group) {
 			gain *= audio_volume(Database<SoundGroupPrototype>::get(prototype.group).volume);
+		}
+		for (auto& voice : state->voices) {
+			if (voice->path != prototype.path || !ma_sound_at_end(&voice->sound)) {
+				continue;
+			}
+			ma_sound_set_volume(&voice->sound, gain);
+			if (ma_sound_start(&voice->sound) != MA_SUCCESS) {
+				throw runtime_exception("cannot start sound");
+			}
+			return true;
 		}
 		const auto path = fs::path::parse(prototype.path);
 		if (!path) {
@@ -103,12 +121,12 @@ namespace lf {
 		if (!bytes) {
 			throw runtime_exception(bytes.error().message);
 		}
-
 		if (!state->open()) {
 			return false;
 		}
-		update();
+
 		auto voice = std::make_unique<State::Voice>();
+		voice->path = prototype.path;
 		voice->bytes = std::move(*bytes);
 		const auto config = ma_decoder_config_init(ma_format_f32, 2, 48000);
 		if (ma_decoder_init_memory(voice->bytes.data(), voice->bytes.size(), &config, &voice->decoder) != MA_SUCCESS) {
@@ -147,7 +165,7 @@ namespace lf {
 	}
 
 	void Audio::update() {
-		std::erase_if(state->voices, [](const auto& voice) { return ma_sound_at_end(&voice->sound) == MA_TRUE; });
+		// Completed voices stay available for replay without reopening or decoding the sound.
 	}
 
 	usize Audio::active_count() const {
